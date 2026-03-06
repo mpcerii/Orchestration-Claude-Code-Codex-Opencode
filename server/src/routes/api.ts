@@ -4,7 +4,7 @@
 
 import { Router } from 'express';
 import * as store from '../data/store.js';
-import { getAvailableModels } from '../engine/cli-runner.js';
+import { getAvailableModels, checkToolStatus } from '../engine/cli-runner.js';
 import type { CliTool } from '../types.js';
 
 const router = Router();
@@ -96,6 +96,35 @@ router.delete('/tasks/:id', (req, res) => {
     res.json({ success: true });
 });
 
+// ---- Swarms ----
+
+router.get('/swarms', (_req, res) => {
+    res.json(store.getSwarms());
+});
+
+router.get('/swarms/:id', (req, res) => {
+    const swarm = store.getSwarmById(req.params.id);
+    if (!swarm) return res.status(404).json({ error: 'Swarm not found' });
+    res.json(swarm);
+});
+
+router.post('/swarms', (req, res) => {
+    const swarm = store.createSwarm(req.body);
+    res.status(201).json(swarm);
+});
+
+router.put('/swarms/:id', (req, res) => {
+    const swarm = store.updateSwarm(req.params.id, req.body);
+    if (!swarm) return res.status(404).json({ error: 'Swarm not found' });
+    res.json(swarm);
+});
+
+router.delete('/swarms/:id', (req, res) => {
+    const ok = store.deleteSwarm(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Swarm not found' });
+    res.json({ success: true });
+});
+
 // ---- Settings ----
 
 router.get('/settings', (_req, res) => {
@@ -112,6 +141,22 @@ router.put('/settings', (req, res) => {
 router.get('/models/:tool', (req, res) => {
     const tool = req.params.tool as CliTool;
     res.json(getAvailableModels(tool));
+});
+
+// ---- System Status ----
+
+router.get('/system/tools-status', async (_req, res) => {
+    const tools = ['claude', 'gemini', 'codex', 'opencode'];
+    const status: Record<string, boolean> = {};
+
+    // Check all tools concurrently
+    await Promise.all(
+        tools.map(async (tool) => {
+            status[tool] = await checkToolStatus(tool);
+        })
+    );
+
+    res.json(status);
 });
 
 export default router;

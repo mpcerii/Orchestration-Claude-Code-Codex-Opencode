@@ -6,11 +6,14 @@ export function useWebSocket() {
     const [messages, setMessages] = useState<WsMessage[]>([]);
     const [connected, setConnected] = useState(false);
     const reconnectRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+    const dismountedRef = useRef(false);
 
     useEffect(() => {
+        dismountedRef.current = false;
+
         function connect() {
-            // Connect directly to the backend WebSocket server
-            // In dev: backend runs on 3001; in prod: same host
+            if (dismountedRef.current) return;
+
             const isDev = window.location.port === '5173' || window.location.port === '5174';
             const wsHost = isDev ? `${window.location.hostname}:3001` : window.location.host;
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -28,11 +31,12 @@ export function useWebSocket() {
             ws.onclose = () => {
                 console.log('[WS] Disconnected');
                 setConnected(false);
-                // Auto-reconnect after 3s
-                reconnectRef.current = setTimeout(() => {
-                    console.log('[WS] Reconnecting...');
-                    connect();
-                }, 3000);
+                if (!dismountedRef.current) {
+                    reconnectRef.current = setTimeout(() => {
+                        console.log('[WS] Reconnecting...');
+                        connect();
+                    }, 3000);
+                }
             };
 
             ws.onerror = (err) => {
@@ -53,6 +57,7 @@ export function useWebSocket() {
         connect();
 
         return () => {
+            dismountedRef.current = true;
             if (reconnectRef.current) clearTimeout(reconnectRef.current);
             wsRef.current?.close();
         };

@@ -1,0 +1,41 @@
+[
+  {
+    "name": "Baut bitte das admin panel aus für Vikaro-Webapp macht es so, das wir dort wirklich alles managen können und nutzern alles bieten können !",
+    "description": "Baut bitte das admin panel aus für Vikaro-Webapp macht es so, das wir dort wirklich alles managen können und nutzern alles bieten können ! Der ordner ist leer, ihr sollt das ausbauen !\n",
+    "agents": [
+      {
+        "agentId": "f9b245af-c87c-44fd-b700-d9b33b0cd516",
+        "role": "coordinator",
+        "instructions": ""
+      },
+      {
+        "agentId": "f8df330d-b4e1-4903-a0f8-732cb108946d",
+        "role": "developer",
+        "instructions": "Du bist designer"
+      },
+      {
+        "agentId": "17fd942f-5654-451e-a8ed-6540d752ffa3",
+        "role": "developer",
+        "instructions": ""
+      },
+      {
+        "agentId": "b423e22c-6e04-4821-8de7-d3fbccf10484",
+        "role": "reviewer",
+        "instructions": ""
+      },
+      {
+        "agentId": "3d32e0f1-e1d3-4f8b-b3ba-a8b40c7a1fe7",
+        "role": "reviewer",
+        "instructions": ""
+      }
+    ],
+    "workspacePath": "C:\\Users\\mikai\\Documents\\Vikaro_Clean/Vikaro-Admin",
+    "maxRounds": 20,
+    "status": "running",
+    "rounds": [],
+    "currentRound": 0,
+    "id": "5e02fb81-2bde-4e44-9866-62c209764317",
+    "createdAt": "2026-03-06T21:29:20.679Z",
+    "updatedAt": "2026-03-06T21:59:51.421Z"
+  }
+]

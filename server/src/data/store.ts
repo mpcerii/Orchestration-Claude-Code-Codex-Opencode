@@ -5,7 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import type { Agent, AgentTree, Task, AppSettings } from '../types.js';
+import type { Agent, AgentTree, Task, Swarm, AppSettings } from '../types.js';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -149,6 +149,47 @@ export function deleteTask(id: string): boolean {
     const filtered = tasks.filter((t) => t.id !== id);
     if (filtered.length === tasks.length) return false;
     writeJson('tasks.json', filtered);
+    return true;
+}
+
+// ---- Swarms ----
+
+export function getSwarms(): Swarm[] {
+    return readJson<Swarm[]>('swarms.json', []);
+}
+
+export function getSwarmById(id: string): Swarm | undefined {
+    return getSwarms().find((s) => s.id === id);
+}
+
+export function createSwarm(data: Omit<Swarm, 'id' | 'rounds' | 'createdAt' | 'updatedAt'>): Swarm {
+    const swarms = getSwarms();
+    const swarm: Swarm = {
+        ...data,
+        id: uuidv4(),
+        rounds: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    };
+    swarms.push(swarm);
+    writeJson('swarms.json', swarms);
+    return swarm;
+}
+
+export function updateSwarm(id: string, data: Partial<Swarm>): Swarm | null {
+    const swarms = getSwarms();
+    const idx = swarms.findIndex((s) => s.id === id);
+    if (idx === -1) return null;
+    swarms[idx] = { ...swarms[idx], ...data, updatedAt: new Date().toISOString() };
+    writeJson('swarms.json', swarms);
+    return swarms[idx];
+}
+
+export function deleteSwarm(id: string): boolean {
+    const swarms = getSwarms();
+    const filtered = swarms.filter((s) => s.id !== id);
+    if (filtered.length === swarms.length) return false;
+    writeJson('swarms.json', filtered);
     return true;
 }
 

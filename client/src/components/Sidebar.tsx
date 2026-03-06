@@ -6,6 +6,7 @@ import {
     KanbanSquare,
     Settings,
     Zap,
+    Network,
 } from 'lucide-react';
 
 const navItems = [
@@ -13,6 +14,7 @@ const navItems = [
     { to: '/agents', icon: Bot, label: 'Agent Studio' },
     { to: '/trees', icon: GitBranch, label: 'Agent Trees' },
     { to: '/kanban', icon: KanbanSquare, label: 'Kanban Board' },
+    { to: '/swarm', icon: Network, label: 'Agent Swarm' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

@@ -8,8 +8,14 @@ import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import apiRouter from './routes/api.js';
 import { executeTask } from './engine/orchestrator.js';
+import { executeSwarm } from './engine/swarm-orchestrator.js';
 import * as store from './data/store.js';
 import type { WsMessage } from './types.js';
+import * as dotenv from 'dotenv';
+import { startTelegramBot } from './telegram/index.js';
+
+// Load .env
+dotenv.config();
 
 const PORT = process.env.PORT || 3001;
 const app = express();
@@ -42,8 +48,9 @@ function broadcast(msg: WsMessage) {
     });
 }
 
-// Track running tasks to prevent duplicate execution
+// Track running tasks/swarms to prevent duplicate execution
 const runningTasks = new Set<string>();
+const runningSwarms = new Set<string>();
 
 // ─── REST Endpoint for Task Execution (more reliable than WS) ──
 app.post('/api/tasks/:id/execute', async (req, res) => {
@@ -102,6 +109,65 @@ app.post('/api/tasks/:id/execute', async (req, res) => {
     }
 });
 
+// ─── REST Endpoint for Swarm Execution ──────────────────────────
+app.post('/api/swarms/:id/execute', async (req, res) => {
+    const swarmId = req.params.id;
+    console.log(`[Swarm] Received execution request for swarm: ${swarmId}`);
+
+    if (runningSwarms.has(swarmId)) {
+        res.status(409).json({ error: 'Swarm is already running' });
+        return;
+    }
+
+    const swarm = store.getSwarmById(swarmId);
+    if (!swarm) {
+        res.status(404).json({ error: 'Swarm not found' });
+        return;
+    }
+
+    if (!swarm.workspacePath) {
+        res.status(400).json({ error: 'No workspace path set on the swarm' });
+        return;
+    }
+
+    if (!swarm.agents.length) {
+        res.status(400).json({ error: 'No agents in the swarm' });
+        return;
+    }
+
+    // Reset rounds for a fresh run
+    store.updateSwarm(swarmId, { status: 'running', rounds: [], currentRound: 0 });
+    runningSwarms.add(swarmId);
+
+    res.json({ status: 'started', swarmId });
+
+    // Execute in background
+    try {
+        await executeSwarm(
+            { ...swarm, rounds: [], currentRound: 0, status: 'running' },
+            broadcast,
+            (updates) => { store.updateSwarm(swarmId, updates); }
+        );
+        console.log(`[Swarm] Swarm "${swarm.name}" completed`);
+    } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error(`[Swarm] Swarm "${swarm.name}" failed:`, errMsg);
+        store.updateSwarm(swarmId, { status: 'error' });
+        broadcast({ type: 'swarm_error', taskId: swarmId, error: errMsg });
+    } finally {
+        runningSwarms.delete(swarmId);
+    }
+});
+
+app.post('/api/swarms/:id/stop', (req, res) => {
+    const swarmId = req.params.id;
+    // Mark as completed to break the loop on next round check
+    store.updateSwarm(swarmId, { status: 'completed' });
+    runningSwarms.delete(swarmId);
+    broadcast({ type: 'swarm_complete', taskId: swarmId, data: 'Swarm manually stopped.' });
+    res.json({ status: 'stopped' });
+});
+
 // WebSocket: handle task execution requests (kept as alternative)
 wss.on('connection', (ws) => {
     console.log('[WS] Client connected');
@@ -149,6 +215,15 @@ wss.on('connection', (ws) => {
         console.log('[WS] Client disconnected');
     });
 });
+
+
+// ─── Start Telegram Bot ───────────────────────────────────────
+const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+if (telegramToken && telegramToken !== 'your_token_here') {
+    startTelegramBot(telegramToken);
+} else {
+    console.log('[Telegram Bot] TELEGRAM_BOT_TOKEN not set or valid in .env. Bot disabled.');
+}
 
 // Start
 server.listen(PORT, () => {

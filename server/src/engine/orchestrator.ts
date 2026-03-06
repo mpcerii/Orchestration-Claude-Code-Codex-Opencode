@@ -19,9 +19,12 @@ export async function executeTask(
 ): Promise<TaskOutput[]> {
     const outputs: TaskOutput[] = [];
 
+    // Ensure there is always a valid prompt to begin with
+    const initialPrompt = task.prompt?.trim() || task.description?.trim() || task.title;
+
     // Walk each root node with the task's initial prompt
     for (const rootNode of tree.rootNodes) {
-        await walkNode(rootNode, task.prompt, task, tree, outputs, broadcast);
+        await walkNode(rootNode, initialPrompt, task, tree, outputs, broadcast);
     }
 
     broadcast({

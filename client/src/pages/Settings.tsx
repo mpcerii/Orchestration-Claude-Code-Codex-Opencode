@@ -9,9 +9,11 @@ export default function SettingsPage() {
         theme: 'dark',
     });
     const [saved, setSaved] = useState(false);
+    const [toolStatus, setToolStatus] = useState<Record<string, boolean> | null>(null);
 
     useEffect(() => {
         api.getSettings().then(setSettings).catch(() => { });
+        api.getToolsStatus().then(setToolStatus).catch((err) => console.error('Failed to load tool status', err));
     }, []);
 
     async function handleSave() {
@@ -85,7 +87,13 @@ export default function SettingsPage() {
                                             tool === 'codex' ? 'Codex CLI' : 'OpenCode'}
                                 </span>
                             </div>
-                            <span style={{ fontSize: 12, color: 'var(--success)' }}>● Verfügbar</span>
+                            {toolStatus === null ? (
+                                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Prüfe...</span>
+                            ) : toolStatus[tool] ? (
+                                <span style={{ fontSize: 12, color: 'var(--success)' }}>● Verfügbar</span>
+                            ) : (
+                                <span style={{ fontSize: 12, color: 'var(--error)' }}>○ Nicht installiert</span>
+                            )}
                         </div>
                     ))}
                 </div>

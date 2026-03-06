@@ -78,12 +78,45 @@ export interface TaskOutput {
 
 // WebSocket Events
 export interface WsMessage {
-    type: 'agent_start' | 'agent_output' | 'agent_complete' | 'agent_error' | 'task_complete';
+    type: 'agent_start' | 'agent_output' | 'agent_complete' | 'agent_error' | 'task_complete' | 'swarm_round' | 'swarm_complete' | 'swarm_error' | 'swarm_status';
     taskId: string;
     agentId?: string;
     agentName?: string;
     data?: string;
     error?: string;
+}
+
+// Agent Swarm – autonomous multi-agent collaboration
+export type SwarmStatus = 'idle' | 'running' | 'paused' | 'completed' | 'error';
+
+export interface SwarmAgent {
+    agentId: string;
+    role: 'coordinator' | 'analyzer' | 'developer' | 'reviewer' | 'tester';
+    instructions: string; // What this agent should focus on
+}
+
+export interface SwarmRound {
+    round: number;
+    agentId: string;
+    agentName: string;
+    role: string;
+    input: string;
+    output: string;
+    timestamp: string;
+}
+
+export interface Swarm {
+    id: string;
+    name: string;
+    description: string;
+    agents: SwarmAgent[];
+    workspacePath: string;
+    maxRounds: number;       // Safety limit
+    status: SwarmStatus;
+    rounds: SwarmRound[];
+    currentRound: number;
+    createdAt: string;
+    updatedAt: string;
 }
 
 // Settings

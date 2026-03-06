@@ -50,6 +50,20 @@ export const api = {
     executeTask: (id: string) =>
         request<{ status: string; taskId: string }>(`/tasks/${id}/execute`, { method: 'POST' }),
 
+    // Swarms
+    getSwarms: () => request<import('./types').Swarm[]>('/swarms'),
+    getSwarm: (id: string) => request<import('./types').Swarm>(`/swarms/${id}`),
+    createSwarm: (data: Partial<import('./types').Swarm>) =>
+        request<import('./types').Swarm>('/swarms', { method: 'POST', body: JSON.stringify(data) }),
+    updateSwarm: (id: string, data: Partial<import('./types').Swarm>) =>
+        request<import('./types').Swarm>(`/swarms/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteSwarm: (id: string) =>
+        request<{ success: boolean }>(`/swarms/${id}`, { method: 'DELETE' }),
+    executeSwarm: (id: string) =>
+        request<{ status: string; swarmId: string }>(`/swarms/${id}/execute`, { method: 'POST' }),
+    stopSwarm: (id: string) =>
+        request<{ status: string }>(`/swarms/${id}/stop`, { method: 'POST' }),
+
     // Settings
     getSettings: () => request<import('./types').AppSettings>('/settings'),
     updateSettings: (data: Partial<import('./types').AppSettings>) =>
@@ -57,4 +71,7 @@ export const api = {
 
     // Models
     getModels: (tool: import('./types').CliTool) => request<string[]>(`/models/${tool}`),
+
+    // System
+    getToolsStatus: () => request<Record<string, boolean>>('/system/tools-status'),
 };

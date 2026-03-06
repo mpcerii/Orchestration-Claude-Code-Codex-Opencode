@@ -18,6 +18,7 @@ const DEFAULT_AGENT: Partial<Agent> = {
 export default function AgentStudio() {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [editing, setEditing] = useState<Partial<Agent> | null>(null);
+    const [availableModels, setAvailableModels] = useState<string[]>([]);
 
     useEffect(() => {
         loadAgents();
@@ -30,10 +31,22 @@ export default function AgentStudio() {
 
     function startNew() {
         setEditing({ ...DEFAULT_AGENT });
+        loadModelsForTool(DEFAULT_AGENT.cliTool!);
     }
 
     function startEdit(agent: Agent) {
         setEditing({ ...agent });
+        loadModelsForTool(agent.cliTool);
+    }
+
+    async function loadModelsForTool(tool: CliTool) {
+        try {
+            const models = await api.getModels(tool);
+            setAvailableModels(models);
+        } catch (err) {
+            console.error('Failed to load models for tool:', tool);
+            setAvailableModels([]);
+        }
     }
 
     async function handleSave() {
@@ -54,6 +67,7 @@ export default function AgentStudio() {
 
     function handleToolChange(tool: CliTool) {
         setEditing((prev) => prev ? { ...prev, cliTool: tool, model: '' } : null);
+        loadModelsForTool(tool);
     }
 
     function handleRoleChange(role: AgentRole) {
@@ -115,14 +129,15 @@ export default function AgentStudio() {
                                 <div>
                                     <div>
                                         <label className="label">Model</label>
-                                        <input className="input"
-                                            placeholder={editing.cliTool === 'claude' ? 'z.B. sonnet, opus, haiku' :
-                                                editing.cliTool === 'gemini' ? 'z.B. gemini-2.5-pro' :
-                                                    editing.cliTool === 'codex' ? 'z.B. o3, o4-mini' :
-                                                        'z.B. anthropic/claude-sonnet-4-6'}
+                                        <select className="select"
                                             value={editing.model || ''}
                                             onChange={(e) => setEditing({ ...editing, model: e.target.value })}
-                                        />
+                                        >
+                                            <option value="" disabled>Bitte ein Modell wählen...</option>
+                                            {availableModels.map((m) => (
+                                                <option key={m} value={m}>{m}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
                             </div>

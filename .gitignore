@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+.pnp
+.pnp.js
+
+# Build Outputs (Frontend/Backend)
+dist/
+dist-ssr/
+build/
+coverage/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+server/.env
+client/.env
+
+# Local App Data & Private Logs
+# (Tasks and histories generally shouldn't be pushed to the main repo)
+server/data/tasks.json
+server/data/trees.json
+server/data/agents.json
+
+# OS Specific
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE & Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sqm
+*.sw?

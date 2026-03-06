@@ -277,6 +277,7 @@ export default function KanbanBoard() {
     const [activeOutput, setActiveOutput] = useState<string | null>(null);
     const [cachedMessages, setCachedMessages] = useState<WsMessage[]>([]);
     const [activeTask, setActiveTask] = useState<Task | null>(null);
+    const [executing, setExecuting] = useState(false);
     const { messages } = useWebSocket();
     const initialLoadDone = useRef(false);
 
@@ -364,6 +365,8 @@ export default function KanbanBoard() {
     }
 
     async function handleExecute(taskId: string) {
+        if (executing) return;
+        setExecuting(true);
         try {
             setActiveOutput(taskId);
             setCachedMessages([]);  // Reset cached messages for new execution
@@ -373,6 +376,8 @@ export default function KanbanBoard() {
         } catch (err) {
             console.error('Execute failed:', err);
             loadData();
+        } finally {
+            setExecuting(false);
         }
     }
 
