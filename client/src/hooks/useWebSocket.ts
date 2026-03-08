@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { WsMessage } from '../types';
+import type { SocketMessage, WsMessage, StudioEvent } from '../types';
 
 export function useWebSocket() {
     const wsRef = useRef<WebSocket | null>(null);
     const [messages, setMessages] = useState<WsMessage[]>([]);
+    const [studioEvents, setStudioEvents] = useState<StudioEvent[]>([]);
     const [connected, setConnected] = useState(false);
     const reconnectRef = useRef<ReturnType<typeof setTimeout>>(undefined);
     const dismountedRef = useRef(false);
@@ -45,8 +46,16 @@ export function useWebSocket() {
 
             ws.onmessage = (event) => {
                 try {
-                    const msg: WsMessage = JSON.parse(event.data);
-                    console.log('[WS] Message:', msg.type, msg.agentName || '');
+                    const msg: SocketMessage = JSON.parse(event.data);
+                    if (msg.type === 'studio.event') {
+                        setStudioEvents((prev) => [...prev, msg.event]);
+                        return;
+                    }
+
+                    if (msg.type === 'studio.connected') {
+                        return;
+                    }
+
                     setMessages((prev) => [...prev, msg]);
                 } catch (e) {
                     console.error('[WS] Failed to parse:', event.data);
@@ -69,7 +78,10 @@ export function useWebSocket() {
         }
     }, []);
 
-    const clearMessages = useCallback(() => setMessages([]), []);
+    const clearMessages = useCallback(() => {
+        setMessages([]);
+        setStudioEvents([]);
+    }, []);
 
-    return { messages, connected, send, clearMessages };
+    return { messages, studioEvents, connected, send, clearMessages };
 }

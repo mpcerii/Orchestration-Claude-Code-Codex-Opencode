@@ -74,4 +74,16 @@ export const api = {
 
     // System
     getToolsStatus: () => request<Record<string, boolean>>('/system/tools-status'),
+
+    // Swarm Studio
+    getStudioBootstrap: () => request<import('./types').StudioBootstrap>('/studio/bootstrap'),
+    getStudioRun: (id: string) => request<import('./types').StudioRunDetail>(`/studio/runs/${id}`),
+    createStudioRun: (goal: string) =>
+        request<import('./types').StudioRunDetail>('/studio/runs', { method: 'POST', body: JSON.stringify({ goal }) }),
+    cancelStudioRun: (id: string) =>
+        request<import('./types').StudioRunDetail>(`/studio/runs/${id}/cancel`, { method: 'POST' }),
+    searchStudioMemory: (query: string) =>
+        request<import('./types').MemoryEntry[]>(`/studio/memory/search?q=${encodeURIComponent(query)}`),
+    runScheduleNow: (id: string) =>
+        request<import('./types').StudioSchedule>(`/studio/schedules/${id}/run-now`, { method: 'POST' }),
 };

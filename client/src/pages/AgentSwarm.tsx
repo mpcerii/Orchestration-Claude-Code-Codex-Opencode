@@ -1,10 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../api';
 import { useWebSocket } from '../hooks/useWebSocket';
-import type { Agent, Swarm, SwarmAgent, WsMessage } from '../types';
+import type { Agent, Swarm, SwarmAgent } from '../types';
 import {
     Plus, Trash2, Edit3, Save, X, Network, Play, Square,
-    ChevronDown, ChevronRight, User, Bot,
 } from 'lucide-react';
 
 const SWARM_ROLES = [
@@ -516,43 +515,6 @@ export default function AgentSwarm() {
                     </div>
                 )}
             </div>
-        </div>
-    );
-}
-
-function SwarmRoundDisplay({ round, getAgentColor }: {
-    round: import('../types').SwarmRound;
-    getAgentColor: (id: string) => string;
-}) {
-    const [expanded, setExpanded] = useState(false);
-    const color = getAgentColor(round.agentId);
-    const roleColor = SWARM_ROLES.find((r) => r.value === round.role)?.color || '#888';
-
-    return (
-        <div style={{ marginBottom: 8, borderLeft: `3px solid ${color}`, paddingLeft: 12 }}>
-            <div
-                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '4px 0' }}
-                onClick={() => setExpanded(!expanded)}
-            >
-                {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                <span style={{ color: roleColor, fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>
-                    [{round.role}]
-                </span>
-                <span style={{ color, fontWeight: 600 }}>{round.agentName}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-                    Runde {round.round}
-                </span>
-            </div>
-            {expanded && (
-                <div style={{
-                    padding: '8px 12px', marginTop: 4, borderRadius: 6,
-                    background: 'var(--bg-secondary)', whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word', color: 'var(--text-secondary)',
-                    maxHeight: 300, overflow: 'auto',
-                }}>
-                    {round.output}
-                </div>
-            )}
         </div>
     );
 }

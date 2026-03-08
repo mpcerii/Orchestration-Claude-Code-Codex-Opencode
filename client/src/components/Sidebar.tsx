@@ -10,7 +10,8 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-    { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/', icon: LayoutDashboard, label: 'Swarm Studio' },
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Legacy Dashboard' },
     { to: '/agents', icon: Bot, label: 'Agent Studio' },
     { to: '/trees', icon: GitBranch, label: 'Agent Trees' },
     { to: '/kanban', icon: KanbanSquare, label: 'Kanban Board' },
@@ -33,10 +34,10 @@ export default function Sidebar() {
                     </div>
                     <div>
                         <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.02em' }}>
-                            AI Orchestra
+                            AI Swarm Studio
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                            Multi-Agent Workflow
+                            Local Orchestration Runtime
                         </div>
                     </div>
                 </div>

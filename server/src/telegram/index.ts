@@ -1,6 +1,6 @@
 import { initBot } from './bot.js';
 
-export function startTelegramBot(token: string) {
+export function startTelegramBot(token: string): void {
     const bot = initBot(token);
 
     // Launch the bot in polling mode
@@ -11,6 +11,4 @@ export function startTelegramBot(token: string) {
     // Enable graceful stop
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
-
-    return bot;
 }

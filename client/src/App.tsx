@@ -6,6 +6,7 @@ import AgentTreePage from './pages/AgentTree';
 import KanbanBoard from './pages/KanbanBoard';
 import SettingsPage from './pages/Settings';
 import AgentSwarm from './pages/AgentSwarm';
+import SwarmStudio from './pages/SwarmStudio';
 
 export default function App() {
   return (
@@ -14,7 +15,9 @@ export default function App() {
         <Sidebar />
         <main className="main-content">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<SwarmStudio />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/studio" element={<SwarmStudio />} />
             <Route path="/agents" element={<AgentStudio />} />
             <Route path="/trees" element={<AgentTreePage />} />
             <Route path="/kanban" element={<KanbanBoard />} />

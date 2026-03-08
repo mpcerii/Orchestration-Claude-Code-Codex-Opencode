@@ -121,6 +121,127 @@ export interface Swarm {
     updatedAt: string;
 }
 
+export type RunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type ToolCallStatus = 'running' | 'completed' | 'failed';
+export type ScheduleStatus = 'active' | 'paused';
+export type MemoryKind = 'fact' | 'decision' | 'artifact' | 'failure';
+
+export interface StudioAgent {
+    id: string;
+    name: string;
+    role: string;
+    model: string;
+    endpoint: string;
+    color: string;
+    status: 'idle' | 'active' | 'waiting';
+}
+
+export interface StudioRun {
+    id: string;
+    sessionId: string;
+    goal: string;
+    agentName: string | null;
+    state: RunStatus;
+    model: string;
+    startedAt: string;
+    finishedAt: string | null;
+}
+
+export interface StudioToolCall {
+    id: string;
+    runId: string;
+    agentName: string;
+    toolName: string;
+    input: string;
+    output: string;
+    status: ToolCallStatus;
+    startedAt: string;
+    finishedAt: string | null;
+}
+
+export interface StudioMessage {
+    id: string;
+    sessionId: string;
+    runId: string;
+    fromAgent: string;
+    toAgent: string;
+    role: 'handoff' | 'status' | 'result';
+    content: string;
+    createdAt: string;
+}
+
+export interface StudioEvent {
+    id: string;
+    runId: string;
+    sessionId: string;
+    type: string;
+    agentName: string | null;
+    payload: string;
+    createdAt: string;
+}
+
+export interface StudioArtifact {
+    id: string;
+    runId: string;
+    name: string;
+    path: string;
+    kind: string;
+    createdAt: string;
+}
+
+export interface StudioSchedule {
+    id: string;
+    name: string;
+    cron: string;
+    timezone: string;
+    jobType: string;
+    status: ScheduleStatus;
+    lastRunAt: string | null;
+    nextRunAt: string | null;
+}
+
+export interface MemoryEntry {
+    id: string;
+    scope: string;
+    kind: MemoryKind;
+    title: string;
+    content: string;
+    createdAt: string;
+}
+
+export interface StudioBootstrap {
+    overview: {
+        activeRunCount: number;
+        totalRunCount: number;
+        eventCount: number;
+        artifactCount: number;
+        scheduleCount: number;
+        memoryCount: number;
+    };
+    agents: StudioAgent[];
+    runs: StudioRun[];
+    toolCalls: StudioToolCall[];
+    messages: StudioMessage[];
+    events: StudioEvent[];
+    artifacts: StudioArtifact[];
+    schedules: StudioSchedule[];
+    memory: MemoryEntry[];
+    tools: Array<{ name: string; description: string }>;
+}
+
+export interface StudioRunDetail {
+    run: StudioRun;
+    toolCalls: StudioToolCall[];
+    messages: StudioMessage[];
+    events: StudioEvent[];
+    artifacts: StudioArtifact[];
+}
+
+export type SocketMessage =
+    | WsMessage
+    | { type: 'studio.connected'; connectedAt: string }
+    | { type: 'studio.event'; event: StudioEvent };
+
 // UI Helpers
 export const ROLE_OPTIONS: { value: AgentRole; label: string }[] = [
     { value: 'ceo', label: 'CEO / Lead' },
