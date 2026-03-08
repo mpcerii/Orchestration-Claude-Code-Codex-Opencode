@@ -155,7 +155,19 @@ export function deleteTask(id: string): boolean {
 // ---- Swarms ----
 
 export function getSwarms(): Swarm[] {
-    return readJson<Swarm[]>('swarms.json', []);
+    const swarms = readJson<Swarm[]>('swarms.json', []);
+    // Auto-migrate: ensure every SwarmAgent has an id
+    let migrated = false;
+    for (const swarm of swarms) {
+        for (const sa of swarm.agents) {
+            if (!sa.id) {
+                sa.id = uuidv4();
+                migrated = true;
+            }
+        }
+    }
+    if (migrated) writeJson('swarms.json', swarms);
+    return swarms;
 }
 
 export function getSwarmById(id: string): Swarm | undefined {
@@ -167,6 +179,8 @@ export function createSwarm(data: Omit<Swarm, 'id' | 'rounds' | 'createdAt' | 'u
     const swarm: Swarm = {
         ...data,
         id: uuidv4(),
+        // Ensure each SwarmAgent slot has a unique id
+        agents: (data.agents || []).map((sa) => ({ ...sa, id: sa.id || uuidv4() })),
         rounds: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

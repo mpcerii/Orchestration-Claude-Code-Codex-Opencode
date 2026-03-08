@@ -20,6 +20,7 @@ const DEFAULT_SWARM: Partial<Swarm> = {
     description: '',
     agents: [],
     workspacePath: '',
+    minRounds: 3,
     maxRounds: 20,
     status: 'idle',
     rounds: [],
@@ -101,13 +102,13 @@ export default function AgentSwarm() {
     function addAgentToSwarm(agentId: string) {
         if (!editing) return;
         const existing = editing.agents || [];
-        if (existing.find((a) => a.agentId === agentId)) return;
         const isFirst = existing.length === 0;
         setEditing({
             ...editing,
             agents: [
                 ...existing,
                 {
+                    id: crypto.randomUUID(),
                     agentId,
                     role: isFirst ? 'coordinator' : 'developer',
                     instructions: '',
@@ -116,20 +117,20 @@ export default function AgentSwarm() {
         });
     }
 
-    function removeAgentFromSwarm(agentId: string) {
+    function removeAgentFromSwarm(slotId: string) {
         if (!editing) return;
         setEditing({
             ...editing,
-            agents: (editing.agents || []).filter((a) => a.agentId !== agentId),
+            agents: (editing.agents || []).filter((a) => a.id !== slotId),
         });
     }
 
-    function updateSwarmAgent(agentId: string, updates: Partial<SwarmAgent>) {
+    function updateSwarmAgent(slotId: string, updates: Partial<SwarmAgent>) {
         if (!editing) return;
         setEditing({
             ...editing,
             agents: (editing.agents || []).map((a) =>
-                a.agentId === agentId ? { ...a, ...updates } : a
+                a.id === slotId ? { ...a, ...updates } : a
             ),
         });
     }
@@ -212,6 +213,13 @@ export default function AgentSwarm() {
                                     />
                                 </div>
                                 <div>
+                                    <label className="label">Min Runden</label>
+                                    <input className="input" type="number" style={{ width: 80 }}
+                                        value={editing.minRounds || 3}
+                                        onChange={(e) => setEditing({ ...editing, minRounds: parseInt(e.target.value) || 3 })}
+                                    />
+                                </div>
+                                <div>
                                     <label className="label">Max Runden</label>
                                     <input className="input" type="number" style={{ width: 80 }}
                                         value={editing.maxRounds || 20}
@@ -224,9 +232,7 @@ export default function AgentSwarm() {
                             <div>
                                 <label className="label">Agents im Swarm</label>
                                 <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                                    {agents
-                                        .filter((a) => !(editing.agents || []).find((sa) => sa.agentId === a.id))
-                                        .map((a) => (
+                                    {agents.map((a) => (
                                             <button key={a.id} className="btn-secondary"
                                                 style={{ fontSize: 12, padding: '4px 10px' }}
                                                 onClick={() => addAgentToSwarm(a.id)}>
@@ -242,7 +248,7 @@ export default function AgentSwarm() {
                                         const agent = agents.find((a) => a.id === sa.agentId);
                                         if (!agent) return null;
                                         return (
-                                            <div key={sa.agentId} style={{
+                                            <div key={sa.id} style={{
                                                 padding: 12, borderRadius: 10,
                                                 background: 'var(--bg-secondary)',
                                                 border: '1px solid var(--border)',
@@ -262,7 +268,7 @@ export default function AgentSwarm() {
                                                             {agent.cliTool}
                                                         </span>
                                                     </div>
-                                                    <button onClick={() => removeAgentFromSwarm(sa.agentId)}
+                                                    <button onClick={() => removeAgentFromSwarm(sa.id)}
                                                         style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 2 }}>
                                                         <Trash2 size={14} />
                                                     </button>
@@ -270,7 +276,7 @@ export default function AgentSwarm() {
                                                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 8 }}>
                                                     <select className="select" style={{ fontSize: 12 }}
                                                         value={sa.role}
-                                                        onChange={(e) => updateSwarmAgent(sa.agentId, { role: e.target.value as SwarmAgent['role'] })}>
+                                                        onChange={(e) => updateSwarmAgent(sa.id, { role: e.target.value as SwarmAgent['role'] })}>
                                                         {SWARM_ROLES.map((r) => (
                                                             <option key={r.value} value={r.value}>{r.label}</option>
                                                         ))}
@@ -278,7 +284,7 @@ export default function AgentSwarm() {
                                                     <input className="input" style={{ fontSize: 12 }}
                                                         placeholder="Spezifische Anweisungen fuer diesen Agent..."
                                                         value={sa.instructions}
-                                                        onChange={(e) => updateSwarmAgent(sa.agentId, { instructions: e.target.value })}
+                                                        onChange={(e) => updateSwarmAgent(sa.id, { instructions: e.target.value })}
                                                     />
                                                 </div>
                                             </div>
@@ -371,7 +377,7 @@ export default function AgentSwarm() {
                                         );
                                     })}
                                     <div style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>
-                                        {swarm.agents.length} Agents | Runde {swarm.currentRound}/{swarm.maxRounds}
+                                        {swarm.agents.length} Agents | Runde {swarm.currentRound} (min {swarm.minRounds || 3} / max {swarm.maxRounds})
                                     </div>
                                 </div>
 

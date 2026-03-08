@@ -11,8 +11,28 @@ import type { Agent, CliTool } from '../types.js';
 const MODELS: Record<CliTool, string[]> = {
     claude: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
     gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3.1-pro-preview'],
-    codex: ['o3', 'o4-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-5.4'],
-    opencode: ['google/gemini-2.5-pro', 'google/gemini-3.1-pro-preview', 'openai/gpt-5.2', 'opencode/minimax-m2.5-free', 'google/antigravity-claude-sonnet-4-6', 'google/antigravity-claude-opus-4-6-thinking'],
+    codex: ['o3', 'o4-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-5.4', 'gpt-5.3-codex'],
+    opencode: [
+        // Antigravity models (thinking)
+        'google/antigravity-gemini-3-pro',
+        'google/antigravity-gemini-3.1-pro',
+        'google/antigravity-gemini-3-flash',
+        'google/antigravity-claude-sonnet-4-6',
+        'google/antigravity-claude-opus-4-6-thinking',
+        // Gemini CLI quota models
+        'google/gemini-2.5-flash',
+        'google/gemini-2.5-pro',
+        'google/gemini-3-flash-preview',
+        'google/gemini-3-pro-preview',
+        'google/gemini-3.1-pro-preview',
+        'google/gemini-3.1-pro-preview-customtools',
+        // OpenAI models
+        'openai/gpt-5.4',
+        'openai/gpt-5.3',
+        'openai/gpt-5.2',
+        // Other providers
+        'opencode/minimax-m2.5-free',
+    ],
 };
 
 export function getAvailableModels(tool: CliTool): string[] {
@@ -60,7 +80,13 @@ function buildCommand(agent: Agent, workspacePath: string, fullPrompt: string): 
     // Ensure the model is valid for the selected tool, or fallback to the recommended default
     const available = MODELS[cliTool];
     let model = agent.model?.trim();
-    if (model && available && !available.includes(model)) {
+
+    // OpenCode uses provider/model format which changes frequently – trust user input
+    if (cliTool === 'opencode') {
+        if (!model && available && available.length > 0) {
+            model = available[0];
+        }
+    } else if (model && available && !available.includes(model)) {
         console.warn(`[CLI Runner] Invalid model '${model}' for tool '${cliTool}'. Falling back to default: '${available[0]}'`);
         model = available[0];
     } else if (!model && available && available.length > 0) {
@@ -114,12 +140,11 @@ function buildCommand(agent: Agent, workspacePath: string, fullPrompt: string): 
             return {
                 cmd: 'opencode',
                 args: [
+                    'run',
                     ...(model ? ['-m', model] : []),
                     ...extraArgs,
-                    'run',
-                    fullPrompt
                 ],
-                useStdin: false
+                useStdin: true
             };
 
         default:
@@ -192,11 +217,34 @@ export function runAgent(options: RunOptions): ChildProcess {
     }
 
     let fullOutput = '';
+    let skipCodexToolOutput = false;
 
     child.stdout?.on('data', (data: Buffer) => {
-        const chunk = data.toString();
-        fullOutput += chunk;
+        let chunk = data.toString();
         console.log(`[CLI Runner] stdout: ${chunk.substring(0, 100)}...`);
+
+        // OpenCode: filter startup noise from stdout (bun install, ANSI codes, shell resets)
+        if (agent.cliTool === 'opencode') {
+            // Strip ANSI escape codes
+            chunk = chunk.replace(/\x1b\[[0-9;]*m/g, '');
+            // Filter out bun install lines, shell cwd resets, and empty-ish lines
+            const lines = chunk.split('\n');
+            const cleanLines = lines.filter((line) => {
+                const t = line.trim();
+                if (!t) return false;
+                if (t.startsWith('bun install')) return false;
+                if (t.startsWith('Checked ') && t.includes('installs')) return false;
+                if (t.startsWith('Shell cwd was reset')) return false;
+                if (t.startsWith('> ') && (t.includes('Ultraworker') || t.includes('·'))) return false;
+                if (t.startsWith('dotenv@')) return false;
+                if (t.includes('injecting env')) return false;
+                return true;
+            });
+            chunk = cleanLines.join('\n');
+            if (!chunk.trim()) return; // Skip entirely empty chunks
+        }
+
+        fullOutput += chunk;
         onData(chunk);
     });
 
@@ -212,24 +260,51 @@ export function runAgent(options: RunOptions): ChildProcess {
             || errChunk.includes('mcp startup:')
             || errChunk.includes('"isError"')
             || errChunk.includes('"content"')
-            || errChunk.includes('worker quit with fatal');
+            || errChunk.includes('worker quit with fatal')
+            // OpenCode noise
+            || errChunk.includes('config-context')
+            || errChunk.includes('getConfigContext')
+            || errChunk.includes('Sisyphus')
+            || /^\[0m/.test(errChunk.trim())
+            || /^\x1b\[/.test(errChunk);
 
         if (!isNoise) {
             // For codex: extract the useful "codex thinking" lines and command outputs
             if (agent.cliTool === 'codex') {
-                // Filter out raw JSON tool responses and keep progress text
-                const lines = errChunk.split('\n').filter((line: string) => {
+                // Use state to mute entire blocks of tool execution (preventing file dumps in UI)
+                const lines = errChunk.split('\n');
+                const cleanLines: string[] = [];
+
+                for (const line of lines) {
                     const t = line.trim();
-                    return t.length > 0
-                        && !t.startsWith('{')
-                        && !t.startsWith('}')
-                        && !t.startsWith('"')
-                        && !t.startsWith('tool ')
-                        && !t.startsWith('approval_')
-                        && !t.startsWith('provider');
-                });
-                if (lines.length > 0) {
-                    const cleaned = lines.join('\n');
+                    if (t.length === 0) continue;
+
+                    // 'codex' by itself means the assistant is writing a natural language thought
+                    if (t === 'codex') {
+                        skipCodexToolOutput = false;
+                        continue; // Omit the header itself
+                    }
+
+                    // Tools start with command words. Mute everything until the next 'codex' block
+                    if (t === 'exec' || t === 'python' || t.startsWith('codex.')) {
+                        skipCodexToolOutput = true;
+                        continue;
+                    }
+
+                    // Unconditional filters for pure JSON or system noises
+                    if (t.startsWith('{') || t.startsWith('}') || t.startsWith('"') ||
+                        t.startsWith('tool ') || t.startsWith('approval_') || t.startsWith('provider') ||
+                        t.match(/^succeeded in \d+ms:/) || t.match(/^exited [-]?\d+ in \d+ms:/)) {
+                        continue;
+                    }
+
+                    if (!skipCodexToolOutput) {
+                        cleanLines.push(line);
+                    }
+                }
+
+                if (cleanLines.length > 0) {
+                    const cleaned = cleanLines.join('\n');
                     fullOutput += cleaned + '\n';
                     onData(cleaned + '\n');
                 }

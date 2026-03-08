@@ -90,7 +90,8 @@ export interface WsMessage {
 export type SwarmStatus = 'idle' | 'running' | 'paused' | 'completed' | 'error';
 
 export interface SwarmAgent {
-    agentId: string;
+    id: string;          // Unique ID for this swarm slot (allows same agent multiple times)
+    agentId: string;     // References the actual Agent
     role: 'coordinator' | 'analyzer' | 'developer' | 'reviewer' | 'tester';
     instructions: string; // What this agent should focus on
 }
@@ -111,6 +112,7 @@ export interface Swarm {
     description: string;
     agents: SwarmAgent[];
     workspacePath: string;
+    minRounds: number;       // Minimum rounds before SWARM_COMPLETE is allowed
     maxRounds: number;       // Safety limit
     status: SwarmStatus;
     rounds: SwarmRound[];
