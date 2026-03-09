@@ -79,6 +79,24 @@ export class ScheduleRunRepository {
         return this.getByRunId(runId);
     }
 
+    complete(runId: string, finishedAt: string, status: 'completed' | 'failed' | 'cancelled', error?: string | null): PersistedScheduleRun | null {
+        const db = getSqliteDb();
+        db.prepare(`
+            UPDATE schedule_runs
+            SET status = :status,
+                finished_at = :finishedAt,
+                error = :error
+            WHERE run_id = :runId
+        `).run({
+            runId,
+            status,
+            finishedAt,
+            error: error ?? null,
+        });
+
+        return this.getByRunId(runId);
+    }
+
     list(): PersistedScheduleRun[] {
         const db = getSqliteDb();
         return (db.prepare('SELECT * FROM schedule_runs ORDER BY started_at DESC').all() as unknown as ScheduleRunRow[]).map(mapScheduleRun);

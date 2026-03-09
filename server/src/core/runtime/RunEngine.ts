@@ -51,6 +51,11 @@ export class RunEngine {
 
     startRun(context: RunContext): ManagedRun {
         const run = this.registerRun(context);
+        
+        if (run.status === 'running') {
+            return run;
+        }
+
         run.status = 'running';
         run.context.status = 'running';
         this.runRepository?.updateStatus(run.context.runId, {
@@ -67,6 +72,10 @@ export class RunEngine {
         const run = this.runs.get(runId);
         if (!run) {
             return null;
+        }
+
+        if (this.isTerminalStatus(run.status)) {
+            return run;
         }
 
         run.status = 'completed';
@@ -86,6 +95,10 @@ export class RunEngine {
         const run = this.runs.get(runId);
         if (!run) {
             return null;
+        }
+
+        if (this.isTerminalStatus(run.status)) {
+            return run;
         }
 
         run.status = 'failed';
@@ -112,6 +125,10 @@ export class RunEngine {
             return null;
         }
 
+        if (this.isTerminalStatus(run.status)) {
+            return run;
+        }
+
         run.status = 'cancelled';
         run.context.status = 'cancelled';
         run.context.finishedAt = new Date().toISOString();
@@ -132,6 +149,24 @@ export class RunEngine {
         );
     }
 
+    listRunsByTrigger(trigger: RunContext['trigger']): ManagedRun[] {
+        return [...this.runs.values()].filter((run) =>
+            run.context.trigger === trigger
+        );
+    }
+
+    listRunsByScheduleId(scheduleId: string): ManagedRun[] {
+        return [...this.runs.values()].filter((run) =>
+            run.context.scheduleId === scheduleId
+        );
+    }
+
+    listRunsByParentId(parentRunId: string): ManagedRun[] {
+        return [...this.runs.values()].filter((run) =>
+            run.context.parentRunId === parentRunId
+        );
+    }
+
     onLifecycleEvent(listener: (event: RunLifecycleEvent) => void): () => void {
         this.lifecycleListeners.add(listener);
         return () => {
@@ -139,19 +174,30 @@ export class RunEngine {
         };
     }
 
+    private isTerminalStatus(status: RunLifecycleStatus): boolean {
+        return status === 'completed' || status === 'failed' || status === 'cancelled';
+    }
+
     private createBasePayload(run: ManagedRun): RunBasePayload {
         return {
             runId: run.context.runId,
             runType: run.context.runType,
             sourceId: run.context.sourceId,
+            status: run.status,
             rootGoal: run.context.rootGoal,
             startedAt: run.context.startedAt,
+            finishedAt: run.context.finishedAt,
+            trigger: run.context.trigger,
+            scheduleId: run.context.scheduleId,
+            parentRunId: run.context.parentRunId,
+            labels: run.context.labels,
             agentChain: run.context.agentChain,
             artifacts: run.context.artifacts,
             metadata: run.context.metadata,
             timestamp: new Date().toISOString(),
             activeRuns: this.listActiveRuns().length,
             runtimeStateBound: Boolean(this.runtimeState),
+            error: run.context.error,
         };
     }
 

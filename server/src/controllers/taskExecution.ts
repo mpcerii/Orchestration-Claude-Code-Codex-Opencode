@@ -1,72 +1,74 @@
 import * as store from '../data/store.js';
 import type { RunContext } from '../core/runtime/RunContext.js';
 import type { TaskSocketExecutionContext, TaskExecutionContext } from '../core/runtime/ExecutionContexts.js';
+import type { RunEngine } from '../core/runtime/RunEngine.js';
+import { runEngine as globalRunEngine } from '../core/runtime/RunEngine.js';
 import { executeTask } from '../engine/orchestrator.js';
 import {
-    failEarlyIfLifecycleEnabled,
-    createRunContextWithFallback,
-    startRunIfLifecycleEnabled,
-    executeWithLifecycle,
-    type RunStartConfig,
-} from './runStartHelper.js';
+    ExecutionLifecycleHelper,
+    mergeRunEngine,
+    type ExecutionConfig,
+    type ValidationError,
+} from '../core/execution/ExecutionLifecycleHelper.js';
 
 interface TaskExecutionOptions {
     manageRunLifecycle?: boolean;
     runContext?: RunContext;
 }
 
-export async function startTaskExecutionWithOptions(
-    taskId: string,
-    executionContext: TaskExecutionContext,
-    options: TaskExecutionOptions = {}
-): Promise<{ status: number; body: unknown }> {
-    const config: RunStartConfig = {
-        manageRunLifecycle: options.manageRunLifecycle ?? true,
-        runContext: options.runContext,
-    };
+type TaskExecutionDependencies = TaskExecutionContext & { runEngine?: RunEngine };
 
-    if (executionContext.runtimeState.isTaskRunning(taskId)) {
-        return (
-            failEarlyIfLifecycleEnabled(config, {
-                status: 409,
-                message: 'Task is already running',
-            }) ?? { status: 409, body: { error: 'Task is already running' } }
-        );
+function validateTaskExecution(
+    taskId: string,
+    deps: TaskExecutionDependencies,
+    config: ExecutionConfig
+): { error: ValidationError } | null {
+    if (deps.runtimeState.isTaskRunning(taskId)) {
+        return { error: { status: 409, message: 'Task is already running' } };
     }
 
     const task = store.getTaskById(taskId);
     if (!task) {
-        return (
-            failEarlyIfLifecycleEnabled(config, {
-                status: 404,
-                message: 'Task not found',
-            }) ?? { status: 404, body: { error: 'Task not found' } }
-        );
+        return { error: { status: 404, message: 'Task not found' } };
     }
 
     if (!task.assignedTreeId) {
-        return (
-            failEarlyIfLifecycleEnabled(config, {
-                status: 400,
-                message: 'No agent tree assigned to this task',
-            }) ?? { status: 400, body: { error: 'No agent tree assigned to this task' } }
-        );
+        return { error: { status: 400, message: 'No agent tree assigned to this task' } };
     }
 
     const tree = store.getTreeById(task.assignedTreeId);
     if (!tree || !tree.workspacePath) {
-        return (
-            failEarlyIfLifecycleEnabled(config, {
-                status: 400,
-                message: 'Assigned tree is missing or has no workspace path',
-            }) ?? { status: 400, body: { error: 'Assigned tree is missing or has no workspace path' } }
-        );
+        return { error: { status: 400, message: 'Assigned tree is missing or has no workspace path' } };
     }
 
-    store.updateTask(taskId, { status: 'in_progress' });
-    executionContext.runtimeState.startTask(taskId);
+    return null;
+}
 
-    const runContext = createRunContextWithFallback(config, {
+export async function startTaskExecutionWithOptions(
+    taskId: string,
+    deps: TaskExecutionDependencies,
+    options: TaskExecutionOptions = {}
+): Promise<{ status: number; body: unknown }> {
+    const config: ExecutionConfig = {
+        manageRunLifecycle: options.manageRunLifecycle ?? true,
+        runContext: options.runContext,
+    };
+
+    const lifecycleHelper = new ExecutionLifecycleHelper(mergeRunEngine(deps, globalRunEngine));
+
+    const validation = validateTaskExecution(taskId, deps, config);
+    if (validation) {
+        const result = lifecycleHelper.failEarlyIfLifecycleEnabled(config, validation.error);
+        return result ?? { status: validation.error.status, body: { error: validation.error.message } };
+    }
+
+    const task = store.getTaskById(taskId)!;
+    const tree = store.getTreeById(task.assignedTreeId!)!;
+
+    store.updateTask(taskId, { status: 'in_progress' });
+    deps.runtimeState.startTask(taskId);
+
+    const runContext = lifecycleHelper.createRunContextWithFallback(config, {
         runId: taskId,
         runType: 'task',
         sourceId: task.id,
@@ -79,20 +81,20 @@ export async function startTaskExecutionWithOptions(
         },
     });
 
-    startRunIfLifecycleEnabled(config, runContext);
+    lifecycleHelper.startRunIfLifecycleEnabled(config, runContext);
 
     void (async () => {
-        await executeWithLifecycle(
+        await lifecycleHelper.executeWithLifecycle(
             config,
             runContext,
-            () => executeTask(task, tree, executionContext.broadcaster.broadcastLegacy),
+            () => executeTask(task, tree, deps.broadcaster.broadcastLegacy),
             {
                 onSuccess: (outputs) => {
                     store.updateTask(taskId, { status: 'done', outputs });
                 },
                 onError: (message) => {
                     store.updateTask(taskId, { status: 'review' });
-                    executionContext.broadcaster.broadcastLegacy({
+                    deps.broadcaster.broadcastLegacy({
                         type: 'agent_error',
                         taskId,
                         error: message,
@@ -100,7 +102,7 @@ export async function startTaskExecutionWithOptions(
                 },
             }
         );
-        executionContext.runtimeState.finishTask(taskId);
+        deps.runtimeState.finishTask(taskId);
     })();
 
     return { status: 200, body: { status: 'started', taskId } };
@@ -108,14 +110,14 @@ export async function startTaskExecutionWithOptions(
 
 export async function startTaskExecution(
     taskId: string,
-    executionContext: TaskExecutionContext
+    deps: TaskExecutionDependencies
 ): Promise<{ status: number; body: unknown }> {
-    return startTaskExecutionWithOptions(taskId, executionContext);
+    return startTaskExecutionWithOptions(taskId, deps);
 }
 
 export async function executeTaskFromSocket(
     payload: { type?: string; taskId?: string },
-    socketContext: TaskSocketExecutionContext
+    socketContext: TaskSocketExecutionContext & { runEngine?: RunEngine }
 ): Promise<void> {
     if (payload.type !== 'execute_task' || !payload.taskId) {
         return;

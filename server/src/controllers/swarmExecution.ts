@@ -1,54 +1,64 @@
 import * as store from '../data/store.js';
 import type { RunContext } from '../core/runtime/RunContext.js';
 import type { SwarmExecutionContext } from '../core/runtime/ExecutionContexts.js';
+import type { RunEngine } from '../core/runtime/RunEngine.js';
+import { runEngine as globalRunEngine } from '../core/runtime/RunEngine.js';
 import { executeSwarm } from '../engine/swarm-orchestrator.js';
-import { runEngine } from '../core/runtime/RunEngine.js';
 import {
-    failEarlyIfLifecycleEnabled,
-    createRunContextWithFallback,
-    startRunIfLifecycleEnabled,
-    executeWithLifecycle,
-    type RunStartConfig,
-} from './runStartHelper.js';
+    ExecutionLifecycleHelper,
+    mergeRunEngine,
+    type ExecutionConfig,
+    type ValidationError,
+} from '../core/execution/ExecutionLifecycleHelper.js';
 
 interface SwarmExecutionOptions {
     manageRunLifecycle?: boolean;
     runContext?: RunContext;
 }
 
-export async function startSwarmExecutionWithOptions(
-    swarmId: string,
-    executionContext: SwarmExecutionContext,
-    options: SwarmExecutionOptions = {}
-): Promise<{ status: number; body: unknown }> {
-    const config: RunStartConfig = {
-        manageRunLifecycle: options.manageRunLifecycle ?? true,
-        runContext: options.runContext,
-    };
+type SwarmExecutionDependencies = SwarmExecutionContext & { runEngine?: RunEngine };
 
-    if (executionContext.runtimeState.isSwarmRunning(swarmId)) {
-        return (
-            failEarlyIfLifecycleEnabled(config, {
-                status: 409,
-                message: 'Swarm is already running',
-            }) ?? { status: 409, body: { error: 'Swarm is already running' } }
-        );
+function validateSwarmExecution(
+    swarmId: string,
+    deps: SwarmExecutionDependencies,
+    config: ExecutionConfig
+): { error: ValidationError } | null {
+    if (deps.runtimeState.isSwarmRunning(swarmId)) {
+        return { error: { status: 409, message: 'Swarm is already running' } };
     }
 
     const swarm = store.getSwarmById(swarmId);
     if (!swarm || !swarm.workspacePath || swarm.agents.length === 0) {
-        return (
-            failEarlyIfLifecycleEnabled(config, {
-                status: 400,
-                message: 'Swarm is missing, has no workspace path, or contains no agents',
-            }) ?? { status: 400, body: { error: 'Swarm is missing, has no workspace path, or contains no agents' } }
-        );
+        return { error: { status: 400, message: 'Swarm is missing, has no workspace path, or contains no agents' } };
     }
 
-    store.updateSwarm(swarmId, { status: 'running', rounds: [], currentRound: 0 });
-    executionContext.runtimeState.startSwarm(swarmId);
+    return null;
+}
 
-    const runContext = createRunContextWithFallback(config, {
+export async function startSwarmExecutionWithOptions(
+    swarmId: string,
+    deps: SwarmExecutionDependencies,
+    options: SwarmExecutionOptions = {}
+): Promise<{ status: number; body: unknown }> {
+    const config: ExecutionConfig = {
+        manageRunLifecycle: options.manageRunLifecycle ?? true,
+        runContext: options.runContext,
+    };
+
+    const lifecycleHelper = new ExecutionLifecycleHelper(mergeRunEngine(deps, globalRunEngine));
+
+    const validation = validateSwarmExecution(swarmId, deps, config);
+    if (validation) {
+        const result = lifecycleHelper.failEarlyIfLifecycleEnabled(config, validation.error);
+        return result ?? { status: validation.error.status, body: { error: validation.error.message } };
+    }
+
+    const swarm = store.getSwarmById(swarmId)!;
+
+    store.updateSwarm(swarmId, { status: 'running', rounds: [], currentRound: 0 });
+    deps.runtimeState.startSwarm(swarmId);
+
+    const runContext = lifecycleHelper.createRunContextWithFallback(config, {
         runId: swarmId,
         runType: 'swarm',
         sourceId: swarm.id,
@@ -62,16 +72,16 @@ export async function startSwarmExecutionWithOptions(
         },
     });
 
-    startRunIfLifecycleEnabled(config, runContext);
+    lifecycleHelper.startRunIfLifecycleEnabled(config, runContext);
 
     void (async () => {
-        await executeWithLifecycle(
+        await lifecycleHelper.executeWithLifecycle(
             config,
             runContext,
             () =>
                 executeSwarm(
                     { ...swarm, status: 'running', rounds: [], currentRound: 0 },
-                    executionContext.broadcaster.broadcastLegacy,
+                    deps.broadcaster.broadcastLegacy,
                     (updates) => {
                         store.updateSwarm(swarmId, updates);
                     }
@@ -82,7 +92,7 @@ export async function startSwarmExecutionWithOptions(
                 },
                 onError: (message) => {
                     store.updateSwarm(swarmId, { status: 'error' });
-                    executionContext.broadcaster.broadcastLegacy({
+                    deps.broadcaster.broadcastLegacy({
                         type: 'swarm_error',
                         taskId: swarmId,
                         error: message,
@@ -90,7 +100,7 @@ export async function startSwarmExecutionWithOptions(
                 },
             }
         );
-        executionContext.runtimeState.finishSwarm(swarmId);
+        deps.runtimeState.finishSwarm(swarmId);
     })();
 
     return { status: 200, body: { status: 'started', swarmId } };
@@ -98,19 +108,19 @@ export async function startSwarmExecutionWithOptions(
 
 export async function startSwarmExecution(
     swarmId: string,
-    executionContext: SwarmExecutionContext
+    deps: SwarmExecutionDependencies
 ): Promise<{ status: number; body: unknown }> {
-    return startSwarmExecutionWithOptions(swarmId, executionContext);
+    return startSwarmExecutionWithOptions(swarmId, deps);
 }
 
 export function stopSwarmExecution(
     swarmId: string,
-    executionContext: SwarmExecutionContext
+    deps: SwarmExecutionDependencies
 ): { status: number; body: unknown } {
     store.updateSwarm(swarmId, { status: 'completed' });
-    executionContext.runtimeState.finishSwarm(swarmId);
-    runEngine.cancelRun(swarmId);
-    executionContext.broadcaster.broadcastLegacy({
+    deps.runtimeState.finishSwarm(swarmId);
+    mergeRunEngine(deps, globalRunEngine).runEngine.cancelRun(swarmId);
+    deps.broadcaster.broadcastLegacy({
         type: 'swarm_complete',
         taskId: swarmId,
         data: 'Swarm manually stopped.',

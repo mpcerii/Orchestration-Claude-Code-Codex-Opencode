@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { RunType, RunLifecycleStatus } from './RunTypes.js';
+import type { RunType, RunLifecycleStatus, RunTrigger } from './RunTypes.js';
 
 export interface RunContext {
     runId: string;
@@ -9,6 +9,10 @@ export interface RunContext {
     finishedAt: string | null;
     status: RunLifecycleStatus;
     rootGoal: string;
+    trigger: RunTrigger;
+    scheduleId: string | null;
+    parentRunId: string | null;
+    labels: string[];
     agentChain: string[];
     artifacts: string[];
     metadata: Record<string, unknown>;
@@ -20,6 +24,10 @@ export interface RunContextInput {
     runType: RunType;
     sourceId: string;
     rootGoal: string;
+    trigger?: RunTrigger;
+    scheduleId?: string;
+    parentRunId?: string;
+    labels?: string[];
     metadata?: Record<string, unknown>;
 }
 
@@ -32,6 +40,10 @@ export function createRunContext(input: RunContextInput): RunContext {
         finishedAt: null,
         status: 'created',
         rootGoal: input.rootGoal,
+        trigger: input.trigger ?? 'manual',
+        scheduleId: input.scheduleId ?? null,
+        parentRunId: input.parentRunId ?? null,
+        labels: input.labels ?? [],
         agentChain: [],
         artifacts: [],
         metadata: input.metadata ?? {},

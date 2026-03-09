@@ -7,48 +7,48 @@ export type RunLifecycleStatus =
     | 'failed'
     | 'cancelled';
 
+export type RunTrigger = 'manual' | 'schedule' | 'api';
+
 export interface RunBasePayload {
     runId: string;
     runType: RunType;
     sourceId: string;
+    status: RunLifecycleStatus;
     rootGoal: string;
     startedAt: string;
+    finishedAt: string | null;
+    trigger: RunTrigger;
+    scheduleId: string | null;
+    parentRunId: string | null;
+    labels: string[];
     agentChain: string[];
     artifacts: string[];
     metadata: Record<string, unknown>;
     timestamp: string;
     activeRuns: number;
     runtimeStateBound: boolean;
+    error: string | null;
 }
 
 export interface RunCreatedPayload extends RunBasePayload {
     type: 'run.created';
-    status: 'created';
-    error: null;
 }
 
 export interface RunStartedPayload extends RunBasePayload {
     type: 'run.started';
-    status: 'running';
-    error: null;
 }
 
 export interface RunFinishedPayload extends RunBasePayload {
     type: 'run.finished';
-    status: 'completed';
-    error: null;
 }
 
 export interface RunFailedPayload extends RunBasePayload {
     type: 'run.failed';
-    status: 'failed';
     error: string;
 }
 
 export interface RunCancelledPayload extends RunBasePayload {
     type: 'run.cancelled';
-    status: 'cancelled';
-    error: null;
 }
 
 export type RunLifecycleEvent =
