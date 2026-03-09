@@ -1,4 +1,6 @@
 import type { Broadcaster } from '../events/Broadcaster.js';
+import type { RunEventRepository } from '../../db/repositories/RunEventRepository.js';
+import type { RunRepository } from '../../db/repositories/RunRepository.js';
 import type { RunContext } from './RunContext.js';
 import type { RunLifecycleStatus } from './RunTypes.js';
 import type { RuntimeState } from './RuntimeState.js';
@@ -14,16 +16,22 @@ export interface ManagedRun {
 interface RunEngineDependencies {
     runtimeState?: RuntimeState;
     broadcaster?: Broadcaster;
+    runRepository?: RunRepository;
+    runEventRepository?: RunEventRepository;
 }
 
 export class RunEngine {
     private readonly runs = new Map<string, ManagedRun>();
     private runtimeState?: RuntimeState;
     private broadcaster?: Broadcaster;
+    private runRepository?: RunRepository;
+    private runEventRepository?: RunEventRepository;
 
     configure(deps: RunEngineDependencies): void {
         this.runtimeState = deps.runtimeState ?? this.runtimeState;
         this.broadcaster = deps.broadcaster ?? this.broadcaster;
+        this.runRepository = deps.runRepository ?? this.runRepository;
+        this.runEventRepository = deps.runEventRepository ?? this.runEventRepository;
     }
 
     registerRun(context: RunContext): ManagedRun {
@@ -41,6 +49,7 @@ export class RunEngine {
         };
 
         this.runs.set(context.runId, run);
+        this.runRepository?.create(context, run.status);
         this.emit('run.created', run);
         return run;
     }
@@ -49,6 +58,12 @@ export class RunEngine {
         const run = this.registerRun(context);
         run.status = 'running';
         run.startedAt = run.startedAt ?? context.startedAt;
+        this.runRepository?.updateStatus(run.context.runId, {
+            status: run.status,
+            startedAt: run.startedAt,
+            finishedAt: run.finishedAt,
+            error: run.error,
+        });
         this.emit('run.started', run);
         return run;
     }
@@ -61,6 +76,12 @@ export class RunEngine {
 
         run.status = 'completed';
         run.finishedAt = new Date().toISOString();
+        this.runRepository?.updateStatus(run.context.runId, {
+            status: run.status,
+            startedAt: run.startedAt,
+            finishedAt: run.finishedAt,
+            error: run.error,
+        });
         this.emit('run.finished', run);
         return run;
     }
@@ -74,6 +95,12 @@ export class RunEngine {
         run.status = 'failed';
         run.error = error ?? null;
         run.finishedAt = new Date().toISOString();
+        this.runRepository?.updateStatus(run.context.runId, {
+            status: run.status,
+            startedAt: run.startedAt,
+            finishedAt: run.finishedAt,
+            error: run.error,
+        });
         this.emit('run.failed', run);
         return run;
     }
@@ -90,6 +117,12 @@ export class RunEngine {
 
         run.status = 'cancelled';
         run.finishedAt = new Date().toISOString();
+        this.runRepository?.updateStatus(run.context.runId, {
+            status: run.status,
+            startedAt: run.startedAt,
+            finishedAt: run.finishedAt,
+            error: run.error,
+        });
         this.emit('run.cancelled', run);
         return run;
     }
@@ -102,7 +135,7 @@ export class RunEngine {
     }
 
     private emit(type: 'run.created' | 'run.started' | 'run.finished' | 'run.failed' | 'run.cancelled', run: ManagedRun): void {
-        this.broadcaster?.broadcast({
+        const payload = {
             type,
             runId: run.context.runId,
             runType: run.context.runType,
@@ -117,7 +150,10 @@ export class RunEngine {
             timestamp: new Date().toISOString(),
             activeRuns: this.listActiveRuns().length,
             runtimeStateBound: Boolean(this.runtimeState),
-        });
+        };
+
+        this.runEventRepository?.create(run.context.runId, type, payload);
+        this.broadcaster?.broadcast(payload);
     }
 }
 
