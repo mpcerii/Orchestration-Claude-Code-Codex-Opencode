@@ -45,14 +45,22 @@ export class SchedulerEngine {
                 return;
             }
 
-            if (event.type === 'run.finished' || event.type === 'run.failed' || event.type === 'run.cancelled') {
-                this.scheduleRunRepository.updateByRunId(event.runId, {
-                    status: event.status,
-                    finishedAt: event.timestamp,
-                    error: typeof event.error === 'string' ? event.error : null,
-                });
-                this.scheduleRepository.markRunFinished(event.metadata.scheduleId, event.timestamp);
-                this.scheduleLock.release(event.metadata.scheduleId);
+            const scheduleId = event.metadata.scheduleId;
+            const isTerminalState = event.type === 'run.finished' || event.type === 'run.failed' || event.type === 'run.cancelled';
+            
+            if (!isTerminalState) {
+                return;
+            }
+
+            this.scheduleRunRepository.updateByRunId(event.runId, {
+                status: event.status,
+                finishedAt: event.timestamp,
+                error: typeof event.error === 'string' ? event.error : null,
+            });
+            this.scheduleRepository.markRunFinished(scheduleId, event.timestamp);
+            
+            if (this.scheduleLock.isLocked(scheduleId)) {
+                this.scheduleLock.release(scheduleId);
             }
         });
 
@@ -80,17 +88,24 @@ export class SchedulerEngine {
             return { status: 404, body: { error: 'Schedule not found' } };
         }
 
-        if (this.scheduleLock.isLocked(schedule.id)) {
+        if (!this.scheduleLock.acquire(schedule.id)) {
             return { status: 409, body: { error: 'Schedule is already running' } };
         }
 
-        await this.executeSchedule(schedule, true);
-        return { status: 200, body: { status: 'started', scheduleId } };
+        try {
+            await this.executeSchedule(schedule, true);
+            return { status: 200, body: { status: 'started', scheduleId } };
+        } catch (error) {
+            this.scheduleLock.release(schedule.id);
+            throw error;
+        }
     }
 
     private async tick(): Promise<void> {
         const now = new Date();
-        for (const schedule of this.scheduleRepository.listEnabled()) {
+        const enabledSchedules = this.scheduleRepository.listEnabled();
+        
+        for (const schedule of enabledSchedules) {
             if (this.scheduleLock.isLocked(schedule.id)) {
                 continue;
             }
@@ -101,17 +116,22 @@ export class SchedulerEngine {
             }
 
             if (new Date(schedule.nextRunAt).getTime() <= now.getTime()) {
-                await this.executeSchedule(schedule, false);
+                if (!this.scheduleLock.acquire(schedule.id)) {
+                    continue;
+                }
+                
+                try {
+                    await this.executeSchedule(schedule, false);
+                } catch (error) {
+                    this.scheduleLock.release(schedule.id);
+                }
             }
         }
     }
 
     private async executeSchedule(schedule: PersistedSchedule, manual: boolean): Promise<void> {
-        if (!this.scheduleLock.acquire(schedule.id)) {
-            return;
-        }
-
         let runId: string | null = null;
+        
         try {
             const template = schedule.runTemplate as unknown as ScheduleRunTemplate;
             const startedAt = new Date().toISOString();
@@ -168,7 +188,6 @@ export class SchedulerEngine {
                     error: error instanceof Error ? error.message : 'Unknown scheduler error',
                 });
             }
-            this.scheduleLock.release(schedule.id);
             throw error;
         }
     }

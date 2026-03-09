@@ -89,6 +89,12 @@ export class MemoryRepository {
             ORDER BY created_at DESC
         `).all({ pattern: `%${query.toLowerCase()}%` }) as unknown as MemoryRow[]).map(mapMemory);
     }
+
+    deleteById(memoryId: string): boolean {
+        const db = getSqliteDb();
+        const result = db.prepare('DELETE FROM memory_entries WHERE id = :memoryId').run({ memoryId });
+        return result.changes > 0;
+    }
 }
 
 function mapMemory(row: MemoryRow): PersistedMemoryEntry {

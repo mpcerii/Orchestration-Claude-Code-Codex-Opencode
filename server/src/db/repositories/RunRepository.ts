@@ -84,6 +84,12 @@ export class RunRepository {
         const db = getSqliteDb();
         return (db.prepare('SELECT * FROM runs ORDER BY created_at DESC').all() as unknown as RunRow[]).map(mapRun);
     }
+
+    deleteById(runId: string): boolean {
+        const db = getSqliteDb();
+        const result = db.prepare('DELETE FROM runs WHERE id = :runId').run({ runId });
+        return result.changes > 0;
+    }
 }
 
 function mapRun(row: RunRow): PersistedRun {

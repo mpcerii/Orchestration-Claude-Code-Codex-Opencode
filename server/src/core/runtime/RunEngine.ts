@@ -2,15 +2,12 @@ import type { Broadcaster } from '../events/Broadcaster.js';
 import type { RunEventRepository } from '../../db/repositories/RunEventRepository.js';
 import type { RunRepository } from '../../db/repositories/RunRepository.js';
 import type { RunContext } from './RunContext.js';
-import type { RunLifecycleStatus } from './RunTypes.js';
+import type { RunLifecycleStatus, RunLifecycleEvent, RunBasePayload } from './RunTypes.js';
 import type { RuntimeState } from './RuntimeState.js';
 
 export interface ManagedRun {
     context: RunContext;
     status: RunLifecycleStatus;
-    startedAt: string | null;
-    finishedAt: string | null;
-    error: string | null;
 }
 
 interface RunEngineDependencies {
@@ -18,23 +15,6 @@ interface RunEngineDependencies {
     broadcaster?: Broadcaster;
     runRepository?: RunRepository;
     runEventRepository?: RunEventRepository;
-}
-
-export interface RunLifecycleEvent extends Record<string, unknown> {
-    type: 'run.created' | 'run.started' | 'run.finished' | 'run.failed' | 'run.cancelled';
-    runId: string;
-    runType: RunContext['runType'];
-    sourceId: string;
-    status: RunLifecycleStatus;
-    rootGoal: string;
-    startedAt: string;
-    agentChain: string[];
-    artifacts: string[];
-    metadata: Record<string, unknown>;
-    error: string | null;
-    timestamp: string;
-    activeRuns: number;
-    runtimeStateBound: boolean;
 }
 
 export class RunEngine {
@@ -60,10 +40,7 @@ export class RunEngine {
 
         const run: ManagedRun = {
             context,
-            status: 'created',
-            startedAt: null,
-            finishedAt: null,
-            error: null,
+            status: context.status,
         };
 
         this.runs.set(context.runId, run);
@@ -75,12 +52,12 @@ export class RunEngine {
     startRun(context: RunContext): ManagedRun {
         const run = this.registerRun(context);
         run.status = 'running';
-        run.startedAt = run.startedAt ?? context.startedAt;
+        run.context.status = 'running';
         this.runRepository?.updateStatus(run.context.runId, {
             status: run.status,
-            startedAt: run.startedAt,
-            finishedAt: run.finishedAt,
-            error: run.error,
+            startedAt: run.context.startedAt,
+            finishedAt: run.context.finishedAt,
+            error: run.context.error,
         });
         this.emit('run.started', run);
         return run;
@@ -93,12 +70,13 @@ export class RunEngine {
         }
 
         run.status = 'completed';
-        run.finishedAt = new Date().toISOString();
+        run.context.status = 'completed';
+        run.context.finishedAt = new Date().toISOString();
         this.runRepository?.updateStatus(run.context.runId, {
             status: run.status,
-            startedAt: run.startedAt,
-            finishedAt: run.finishedAt,
-            error: run.error,
+            startedAt: run.context.startedAt,
+            finishedAt: run.context.finishedAt,
+            error: run.context.error,
         });
         this.emit('run.finished', run);
         return run;
@@ -111,15 +89,16 @@ export class RunEngine {
         }
 
         run.status = 'failed';
-        run.error = error ?? null;
-        run.finishedAt = new Date().toISOString();
+        run.context.status = 'failed';
+        run.context.error = error ?? null;
+        run.context.finishedAt = new Date().toISOString();
         this.runRepository?.updateStatus(run.context.runId, {
             status: run.status,
-            startedAt: run.startedAt,
-            finishedAt: run.finishedAt,
-            error: run.error,
+            startedAt: run.context.startedAt,
+            finishedAt: run.context.finishedAt,
+            error: run.context.error,
         });
-        this.emit('run.failed', run);
+        this.emit('run.failed', run, error);
         return run;
     }
 
@@ -134,12 +113,13 @@ export class RunEngine {
         }
 
         run.status = 'cancelled';
-        run.finishedAt = new Date().toISOString();
+        run.context.status = 'cancelled';
+        run.context.finishedAt = new Date().toISOString();
         this.runRepository?.updateStatus(run.context.runId, {
             status: run.status,
-            startedAt: run.startedAt,
-            finishedAt: run.finishedAt,
-            error: run.error,
+            startedAt: run.context.startedAt,
+            finishedAt: run.context.finishedAt,
+            error: run.context.error,
         });
         this.emit('run.cancelled', run);
         return run;
@@ -159,23 +139,68 @@ export class RunEngine {
         };
     }
 
-    private emit(type: 'run.created' | 'run.started' | 'run.finished' | 'run.failed' | 'run.cancelled', run: ManagedRun): void {
-        const payload: RunLifecycleEvent = {
-            type,
+    private createBasePayload(run: ManagedRun): RunBasePayload {
+        return {
             runId: run.context.runId,
             runType: run.context.runType,
             sourceId: run.context.sourceId,
-            status: run.status,
             rootGoal: run.context.rootGoal,
             startedAt: run.context.startedAt,
             agentChain: run.context.agentChain,
             artifacts: run.context.artifacts,
             metadata: run.context.metadata,
-            error: run.error,
             timestamp: new Date().toISOString(),
             activeRuns: this.listActiveRuns().length,
             runtimeStateBound: Boolean(this.runtimeState),
         };
+    }
+
+    private emit(
+        type: 'run.created',
+        run: ManagedRun
+    ): void;
+    private emit(
+        type: 'run.started',
+        run: ManagedRun
+    ): void;
+    private emit(
+        type: 'run.finished',
+        run: ManagedRun
+    ): void;
+    private emit(
+        type: 'run.failed',
+        run: ManagedRun,
+        error?: string
+    ): void;
+    private emit(
+        type: 'run.cancelled',
+        run: ManagedRun
+    ): void;
+    private emit(
+        type: 'run.created' | 'run.started' | 'run.finished' | 'run.failed' | 'run.cancelled',
+        run: ManagedRun,
+        error?: string
+    ): void {
+        const base = this.createBasePayload(run);
+
+        let payload: RunLifecycleEvent;
+        switch (type) {
+            case 'run.created':
+                payload = { ...base, type, status: 'created', error: null };
+                break;
+            case 'run.started':
+                payload = { ...base, type, status: 'running', error: null };
+                break;
+            case 'run.finished':
+                payload = { ...base, type, status: 'completed', error: null };
+                break;
+            case 'run.failed':
+                payload = { ...base, type, status: 'failed', error: error ?? 'Unknown error' };
+                break;
+            case 'run.cancelled':
+                payload = { ...base, type, status: 'cancelled', error: null };
+                break;
+        }
 
         this.runEventRepository?.create(run.context.runId, type, payload);
         this.broadcaster?.broadcast(payload);

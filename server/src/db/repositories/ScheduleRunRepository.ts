@@ -42,22 +42,26 @@ export class ScheduleRunRepository {
             startedAt: input.startedAt,
         });
 
-        return {
-            id,
-            scheduleId: input.scheduleId,
-            runId: input.runId,
-            status: input.status,
-            startedAt: input.startedAt,
-            finishedAt: null,
-            error: null,
-        };
+        return this.getById(id)!;
+    }
+
+    getById(id: string): PersistedScheduleRun | null {
+        const db = getSqliteDb();
+        const row = db.prepare('SELECT * FROM schedule_runs WHERE id = :id').get({ id }) as ScheduleRunRow | undefined;
+        return row ? mapScheduleRun(row) : null;
+    }
+
+    getByRunId(runId: string): PersistedScheduleRun | null {
+        const db = getSqliteDb();
+        const row = db.prepare('SELECT * FROM schedule_runs WHERE run_id = :runId').get({ runId }) as ScheduleRunRow | undefined;
+        return row ? mapScheduleRun(row) : null;
     }
 
     updateByRunId(runId: string, input: {
         status: string;
         finishedAt?: string | null;
         error?: string | null;
-    }): void {
+    }): PersistedScheduleRun | null {
         const db = getSqliteDb();
         db.prepare(`
             UPDATE schedule_runs
@@ -71,6 +75,13 @@ export class ScheduleRunRepository {
             finishedAt: input.finishedAt ?? null,
             error: input.error ?? null,
         });
+
+        return this.getByRunId(runId);
+    }
+
+    list(): PersistedScheduleRun[] {
+        const db = getSqliteDb();
+        return (db.prepare('SELECT * FROM schedule_runs ORDER BY started_at DESC').all() as unknown as ScheduleRunRow[]).map(mapScheduleRun);
     }
 
     listByScheduleId(scheduleId: string): PersistedScheduleRun[] {
@@ -80,6 +91,24 @@ export class ScheduleRunRepository {
             WHERE schedule_id = :scheduleId
             ORDER BY started_at DESC
         `).all({ scheduleId }) as unknown as ScheduleRunRow[]).map(mapScheduleRun);
+    }
+
+    deleteById(id: string): boolean {
+        const db = getSqliteDb();
+        const result = db.prepare('DELETE FROM schedule_runs WHERE id = :id').run({ id });
+        return result.changes > 0;
+    }
+
+    deleteByRunId(runId: string): boolean {
+        const db = getSqliteDb();
+        const result = db.prepare('DELETE FROM schedule_runs WHERE run_id = :runId').run({ runId });
+        return result.changes > 0;
+    }
+
+    deleteByScheduleId(scheduleId: string): number {
+        const db = getSqliteDb();
+        const result = db.prepare('DELETE FROM schedule_runs WHERE schedule_id = :scheduleId').run({ scheduleId });
+        return result.changes;
     }
 }
 

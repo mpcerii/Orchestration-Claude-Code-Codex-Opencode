@@ -55,7 +55,14 @@ export function runSqliteMigrations(db: DatabaseSync): void {
             status TEXT NOT NULL,
             started_at TEXT NOT NULL,
             finished_at TEXT,
-            error TEXT
+            error TEXT,
+            FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE CASCADE,
+            FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
         );
+
+        CREATE INDEX IF NOT EXISTS idx_schedule_runs_schedule_id ON schedule_runs(schedule_id);
+        CREATE INDEX IF NOT EXISTS idx_schedule_runs_run_id ON schedule_runs(run_id);
+        CREATE INDEX IF NOT EXISTS idx_schedule_runs_status ON schedule_runs(status);
+        CREATE INDEX IF NOT EXISTS idx_schedule_runs_started_at ON schedule_runs(started_at);
     `);
 }

@@ -34,13 +34,31 @@ export class RunEventRepository {
             createdAt,
         });
 
-        return { id, runId, eventType, payload, createdAt };
+        return this.getById(id)!;
+    }
+
+    getById(id: string): PersistedRunEvent | null {
+        const db = getSqliteDb();
+        const row = db.prepare('SELECT * FROM run_events WHERE id = :id').get({ id }) as RunEventRow | undefined;
+        return row ? mapRunEvent(row) : null;
     }
 
     listByRunId(runId: string): PersistedRunEvent[] {
         const db = getSqliteDb();
         return (db.prepare('SELECT * FROM run_events WHERE run_id = :runId ORDER BY created_at ASC').all({ runId }) as unknown as RunEventRow[])
             .map(mapRunEvent);
+    }
+
+    deleteById(id: string): boolean {
+        const db = getSqliteDb();
+        const result = db.prepare('DELETE FROM run_events WHERE id = :id').run({ id });
+        return result.changes > 0;
+    }
+
+    deleteByRunId(runId: string): number {
+        const db = getSqliteDb();
+        const result = db.prepare('DELETE FROM run_events WHERE run_id = :runId').run({ runId });
+        return result.changes;
     }
 }
 

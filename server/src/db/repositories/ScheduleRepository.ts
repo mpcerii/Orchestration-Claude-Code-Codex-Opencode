@@ -147,6 +147,12 @@ export class ScheduleRepository {
             updatedAt: lastRunAt,
         });
     }
+
+    deleteById(scheduleId: string): boolean {
+        const db = getSqliteDb();
+        const result = db.prepare('DELETE FROM schedules WHERE id = :scheduleId').run({ scheduleId });
+        return result.changes > 0;
+    }
 }
 
 function mapSchedule(row: ScheduleRow): PersistedSchedule {

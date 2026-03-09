@@ -5,12 +5,18 @@ import { RunRepository } from '../db/repositories/RunRepository.js';
 import { ScheduleRepository } from '../db/repositories/ScheduleRepository.js';
 import { ScheduleRunRepository } from '../db/repositories/ScheduleRunRepository.js';
 import { schedulerEngine } from '../core/scheduler/SchedulerEngine.js';
+import type {
+  StudioRunInput,
+  StudioEventInput,
+  StudioScheduleInput,
+  StudioMemoryInput,
+  StudioScheduleRunInput,
+} from './dtos.js';
 import {
   cancelRun,
   createRun,
   getStudioBootstrap,
 } from './service.js';
-
 const router = Router();
 const runRepository = new RunRepository();
 const runEventRepository = new RunEventRepository();
@@ -156,15 +162,7 @@ router.get('/studio/schedules/:id/history', (req, res) => {
     return;
   }
 
-  res.json(scheduleRunRepository.listByScheduleId(req.params.id).map((entry) => ({
-    id: entry.id,
-    scheduleId: entry.scheduleId,
-    runId: entry.runId,
-    status: entry.status,
-    startedAt: entry.startedAt,
-    finishedAt: entry.finishedAt,
-    error: entry.error,
-  })));
+  res.json(scheduleRunRepository.listByScheduleId(req.params.id).map(mapStudioScheduleRun));
 });
 
 router.get('/studio/memory/search', (req, res) => {
@@ -211,7 +209,7 @@ router.post('/studio/memory/artifacts', (req, res) => {
 
 export default router;
 
-function mapStudioRun(run: ReturnType<RunRepository['getById']> extends infer T ? Exclude<T, null> : never) {
+function mapStudioRun(run: StudioRunInput) {
   return {
     id: run.id,
     sessionId: run.sourceId,
@@ -224,7 +222,7 @@ function mapStudioRun(run: ReturnType<RunRepository['getById']> extends infer T 
   };
 }
 
-function mapStudioEvent(event: ReturnType<RunEventRepository['listByRunId']>[number]) {
+function mapStudioEvent(event: StudioEventInput) {
   return {
     id: event.id,
     runId: event.runId,
@@ -236,7 +234,7 @@ function mapStudioEvent(event: ReturnType<RunEventRepository['listByRunId']>[num
   };
 }
 
-function mapStudioSchedule(schedule: ReturnType<ScheduleRepository['list']>[number]) {
+function mapStudioSchedule(schedule: StudioScheduleInput) {
   return {
     id: schedule.id,
     name: schedule.name,
@@ -249,7 +247,7 @@ function mapStudioSchedule(schedule: ReturnType<ScheduleRepository['list']>[numb
   };
 }
 
-function mapStudioMemory(entry: ReturnType<MemoryRepository['list']>[number]) {
+function mapStudioMemory(entry: StudioMemoryInput) {
   return {
     id: entry.id,
     scope: `${entry.scopeType}:${entry.scopeId}`,
@@ -257,5 +255,17 @@ function mapStudioMemory(entry: ReturnType<MemoryRepository['list']>[number]) {
     title: entry.title,
     content: entry.content,
     createdAt: entry.createdAt,
+  };
+}
+
+function mapStudioScheduleRun(entry: StudioScheduleRunInput) {
+  return {
+    id: entry.id,
+    scheduleId: entry.scheduleId,
+    runId: entry.runId,
+    status: entry.status,
+    startedAt: entry.startedAt,
+    finishedAt: entry.finishedAt,
+    error: entry.error,
   };
 }
