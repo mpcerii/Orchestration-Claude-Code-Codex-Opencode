@@ -72,7 +72,13 @@ export class SchedulerEngine {
 
             this.scheduleRepository.markRunFinished(scheduleId, event.timestamp);
 
-            console.log(`[SchedulerEngine] Released lock for schedule ${scheduleId} after ${event.type}`);
+            const wasLocked = this.scheduleLock.isLocked(scheduleId);
+            if (wasLocked) {
+                const released = this.scheduleLock.release(scheduleId);
+                if (released) {
+                    console.log(`[SchedulerEngine] Released lock for schedule ${scheduleId} after ${event.type}`);
+                }
+            }
         });
 
         void this.tick();

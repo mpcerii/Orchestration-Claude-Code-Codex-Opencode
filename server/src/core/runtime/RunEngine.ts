@@ -248,7 +248,7 @@ export class RunEngine {
                 break;
         }
 
-        this.runEventRepository?.create(run.context.runId, type, payload.metadata);
+        this.runEventRepository?.create(run.context.runId, type, payload);
         this.broadcaster?.broadcast(payload);
         for (const listener of this.lifecycleListeners) {
             listener(payload);
