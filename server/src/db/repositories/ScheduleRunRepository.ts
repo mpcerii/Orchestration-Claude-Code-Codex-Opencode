@@ -114,19 +114,19 @@ export class ScheduleRunRepository {
     deleteById(id: string): boolean {
         const db = getSqliteDb();
         const result = db.prepare('DELETE FROM schedule_runs WHERE id = :id').run({ id });
-        return result.changes > 0;
+        return Number(result.changes) > 0;
     }
 
     deleteByRunId(runId: string): boolean {
         const db = getSqliteDb();
         const result = db.prepare('DELETE FROM schedule_runs WHERE run_id = :runId').run({ runId });
-        return result.changes > 0;
+        return Number(result.changes) > 0;
     }
 
     deleteByScheduleId(scheduleId: string): number {
         const db = getSqliteDb();
         const result = db.prepare('DELETE FROM schedule_runs WHERE schedule_id = :scheduleId').run({ scheduleId });
-        return result.changes;
+        return Number(result.changes);
     }
 }
 

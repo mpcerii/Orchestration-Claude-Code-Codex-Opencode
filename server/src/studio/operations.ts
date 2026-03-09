@@ -12,17 +12,16 @@ import {
   studioMemoryQueries 
 } from './queries.js';
 import { 
-  mapDataRunToAgentRun,
-  mapDataEventToStudioEvent,
-  mapDataScheduleToSchedule,
-  mapDataMemoryToMemoryEntry,
-  mapDataRunToDto,
-  mapDataEventToDto,
-  mapDataScheduleToDto,
-  mapDataMemoryToDto,
-  mapDataScheduleHistoryToDto,
-  type StudioDataRunRow,
-  type StudioDataEventRow,
+  mapDbRunToAgentRun,
+  mapDbEventToStudioEvent,
+  mapDbScheduleToSchedule,
+  mapDbMemoryToMemoryEntry,
+  mapDbRunToDto,
+  mapDbEventToDto,
+  mapDbScheduleToDto,
+  mapDbMemoryToDto,
+  type StudioDbRunRow,
+  type StudioDbEventRow,
 } from './data-mappers.js';
 
 const db = getStudioDb();

@@ -1,11 +1,15 @@
-import type { AgentRun, ToolCall, AgentMessage, StudioEvent, Artifact, Schedule, MemoryEntry } from '../types.js';
-import type { StudioRunDto, StudioEventDto, StudioScheduleDto, StudioMemoryDto, StudioScheduleHistoryDto } from '../dtos.js';
-import { mapStudioRun } from '../mappers/runs.js';
-import { mapStudioEvent } from '../mappers/events.js';
-import { mapStudioSchedule } from '../mappers/schedules.js';
-import { mapStudioMemory } from '../mappers/memory.js';
+/**
+ * Data Mappers - Abbildung von Studio-DB-Rows auf DTOs
+ * 
+ * Diese Datei enthält Mapping-Funktionen für die studio-interne SQLite-Datenbank.
+ * Sie verwendet die expliziten DTOs aus dtos.ts für konsistente Response-Strukturen.
+ */
 
-export interface StudioDataRunRow {
+import type { StudioRunDto, StudioEventDto, StudioScheduleDto, StudioMemoryDto } from '../dtos.js';
+import type { AgentRun, ToolCall, AgentMessage, StudioEvent, Artifact, Schedule, MemoryEntry } from '../types.js';
+
+// Studio-DB Row-Typen (snake_case für SQLite-Kompatibilität)
+export interface StudioDbRunRow {
   id: string;
   session_id: string;
   goal: string;
@@ -16,7 +20,7 @@ export interface StudioDataRunRow {
   finished_at: string | null;
 }
 
-export interface StudioDataEventRow {
+export interface StudioDbEventRow {
   id: string;
   run_id: string;
   session_id: string;
@@ -26,7 +30,7 @@ export interface StudioDataEventRow {
   created_at: string;
 }
 
-export interface StudioDataToolCallRow {
+export interface StudioDbToolCallRow {
   id: string;
   run_id: string;
   agent_name: string;
@@ -38,7 +42,7 @@ export interface StudioDataToolCallRow {
   finished_at: string | null;
 }
 
-export interface StudioDataMessageRow {
+export interface StudioDbMessageRow {
   id: string;
   session_id: string;
   run_id: string;
@@ -49,7 +53,7 @@ export interface StudioDataMessageRow {
   created_at: string;
 }
 
-export interface StudioDataArtifactRow {
+export interface StudioDbArtifactRow {
   id: string;
   run_id: string;
   name: string;
@@ -58,7 +62,7 @@ export interface StudioDataArtifactRow {
   created_at: string;
 }
 
-export interface StudioDataScheduleRow {
+export interface StudioDbScheduleRow {
   id: string;
   name: string;
   cron: string;
@@ -69,7 +73,7 @@ export interface StudioDataScheduleRow {
   next_run_at: string | null;
 }
 
-export interface StudioDataMemoryRow {
+export interface StudioDbMemoryRow {
   id: string;
   scope: string;
   kind: string;
@@ -78,21 +82,58 @@ export interface StudioDataMemoryRow {
   created_at: string;
 }
 
-export function mapDataRunToDto(row: StudioDataRunRow): StudioRunDto {
-  return mapStudioRun({
+// Mapping-Funktionen für Studio-DB zu DTOs
+export function mapDbRunToDto(row: StudioDbRunRow): StudioRunDto {
+  return {
     id: row.id,
-    sourceId: row.session_id,
-    rootGoal: row.goal,
-    status: row.state,
-    metadata: { model: row.model },
+    sessionId: row.session_id,
+    goal: row.goal,
+    agentName: row.agent_name,
+    state: row.state,
+    model: row.model,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
-    createdAt: row.started_at,
-    error: null,
-  });
+  };
 }
 
-export function mapDataRunToAgentRun(row: StudioDataRunRow): AgentRun {
+export function mapDbEventToDto(row: StudioDbEventRow): StudioEventDto {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    sessionId: row.session_id,
+    type: row.type,
+    agentName: row.agent_name,
+    payload: row.payload,
+    createdAt: row.created_at,
+  };
+}
+
+export function mapDbScheduleToDto(row: StudioDbScheduleRow): StudioScheduleDto {
+  return {
+    id: row.id,
+    name: row.name,
+    cron: row.cron,
+    timezone: row.timezone,
+    jobType: row.job_type,
+    status: row.status as 'active' | 'paused',
+    lastRunAt: row.last_run_at,
+    nextRunAt: row.next_run_at,
+  };
+}
+
+export function mapDbMemoryToDto(row: StudioDbMemoryRow): StudioMemoryDto {
+  return {
+    id: row.id,
+    scope: row.scope,
+    kind: row.kind,
+    title: row.title,
+    content: row.content,
+    createdAt: row.created_at,
+  };
+}
+
+// Mapping-Funktionen für interne Typen (für operations.ts)
+export function mapDbRunToAgentRun(row: StudioDbRunRow): AgentRun {
   return {
     id: row.id,
     sessionId: row.session_id,
@@ -105,17 +146,7 @@ export function mapDataRunToAgentRun(row: StudioDataRunRow): AgentRun {
   };
 }
 
-export function mapDataEventToDto(row: StudioDataEventRow): StudioEventDto {
-  return mapStudioEvent({
-    id: row.id,
-    runId: row.run_id,
-    createdAt: row.created_at,
-    eventType: row.type,
-    payload: { type: row.type, payload: JSON.parse(row.payload) },
-  });
-}
-
-export function mapDataEventToStudioEvent(row: StudioDataEventRow): StudioEvent {
+export function mapDbEventToStudioEvent(row: StudioDbEventRow): StudioEvent {
   return {
     id: row.id,
     runId: row.run_id,
@@ -127,22 +158,45 @@ export function mapDataEventToStudioEvent(row: StudioDataEventRow): StudioEvent 
   };
 }
 
-export function mapDataScheduleToDto(row: StudioDataScheduleRow): StudioScheduleDto {
-  return mapStudioSchedule({
+export function mapDbToolCallToToolCall(row: StudioDbToolCallRow): ToolCall {
+  return {
     id: row.id,
-    name: row.name,
-    cronExpr: row.cron,
-    timezone: row.timezone,
-    enabled: row.status === 'active',
-    runTemplate: { jobType: row.job_type },
-    lastRunAt: row.last_run_at,
-    nextRunAt: row.next_run_at,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+    runId: row.run_id,
+    agentName: row.agent_name,
+    toolName: row.tool_name,
+    input: row.input,
+    output: row.output,
+    status: row.status as ToolCall['status'],
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+  };
 }
 
-export function mapDataScheduleToSchedule(row: StudioDataScheduleRow): Schedule {
+export function mapDbMessageToAgentMessage(row: StudioDbMessageRow): AgentMessage {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    runId: row.run_id,
+    fromAgent: row.from_agent,
+    toAgent: row.to_agent,
+    role: row.role as AgentMessage['role'],
+    content: row.content,
+    createdAt: row.created_at,
+  };
+}
+
+export function mapDbArtifactToArtifact(row: StudioDbArtifactRow): Artifact {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    name: row.name,
+    path: row.path,
+    kind: row.kind,
+    createdAt: row.created_at,
+  };
+}
+
+export function mapDbScheduleToSchedule(row: StudioDbScheduleRow): Schedule {
   return {
     id: row.id,
     name: row.name,
@@ -155,20 +209,7 @@ export function mapDataScheduleToSchedule(row: StudioDataScheduleRow): Schedule 
   };
 }
 
-export function mapDataMemoryToDto(row: StudioDataMemoryRow): StudioMemoryDto {
-  return mapStudioMemory({
-    id: row.id,
-    scopeType: row.scope.split(':')[0],
-    scopeId: row.scope.split(':')[1] || 'default',
-    memoryType: row.kind,
-    title: row.title,
-    content: row.content,
-    createdAt: row.created_at,
-    updatedAt: row.created_at,
-  });
-}
-
-export function mapDataMemoryToMemoryEntry(row: StudioDataMemoryRow): MemoryEntry {
+export function mapDbMemoryToMemoryEntry(row: StudioDbMemoryRow): MemoryEntry {
   return {
     id: row.id,
     scope: row.scope,
@@ -176,18 +217,5 @@ export function mapDataMemoryToMemoryEntry(row: StudioDataMemoryRow): MemoryEntr
     title: row.title,
     content: row.content,
     createdAt: row.created_at,
-  };
-}
-
-export function mapDataScheduleHistoryToDto(row: StudioDataEventRow): StudioScheduleHistoryDto {
-  // This would normally come from schedule_runs table, but mapped from events for this demo
-  return {
-    id: row.id,
-    scheduleId: row.run_id.replace('schedule:', ''),
-    runId: row.run_id,
-    status: row.type.startsWith('scheduler.') ? 'success' : 'unknown',
-    startedAt: row.created_at,
-    finishedAt: null,
-    error: null,
   };
 }

@@ -1,5 +1,6 @@
 /**
  * Schedules Routes - Endpunkte für Schedule-Verwaltung
+ * Nutzt explizite DTOs und Validierung
  */
 
 import { Router } from 'express';
@@ -7,6 +8,12 @@ import { ScheduleRepository } from '../../db/repositories/ScheduleRepository.js'
 import { ScheduleRunRepository } from '../../db/repositories/ScheduleRunRepository.js';
 import { schedulerEngine } from '../../core/scheduler/SchedulerEngine.js';
 import { mapStudioSchedule, mapStudioScheduleRun } from '../mappers/index.js';
+import {
+  isValidCreateScheduleRequest,
+  isValidUpdateScheduleRequest,
+  validateIdParam,
+  createErrorResponse,
+} from '../validation.js';
 
 const router = Router();
 const scheduleRepository = new ScheduleRepository();
@@ -14,33 +21,27 @@ const scheduleRunRepository = new ScheduleRunRepository();
 
 // GET /studio/schedules - Liste aller Schedules
 router.get('/', (_req, res) => {
-  res.json(scheduleRepository.list().map(mapStudioSchedule));
+  const schedules = scheduleRepository.list().map(mapStudioSchedule);
+  res.json(schedules);
 });
 
 // POST /studio/schedules - Neuen Schedule erstellen
 router.post('/', (req, res) => {
-  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
-  const cronExpr = typeof req.body?.cron === 'string' ? req.body.cron.trim() : '';
-  const timezone = typeof req.body?.timezone === 'string' ? req.body.timezone.trim() : 'UTC';
-  const goal = typeof req.body?.goal === 'string' ? req.body.goal.trim() : name;
-  const jobType = typeof req.body?.jobType === 'string' ? req.body.jobType.trim() : 'runtime';
-  const sourceType = req.body?.sourceType === 'task' || req.body?.sourceType === 'swarm' ? req.body.sourceType : undefined;
-  const sourceId = typeof req.body?.sourceId === 'string' ? req.body.sourceId.trim() : undefined;
-  const enabled = req.body?.status ? req.body.status === 'active' : Boolean(req.body?.enabled ?? true);
-
-  if (!name || !cronExpr) {
-    res.status(400).json({ error: 'name and cron are required' });
+  if (!isValidCreateScheduleRequest(req.body)) {
+    res.status(400).json(createErrorResponse('name and cron are required'));
     return;
   }
 
+  const { name, cron, timezone, goal, jobType, sourceType, sourceId, status, enabled } = req.body;
+
   const schedule = scheduleRepository.upsert({
-    name,
-    cronExpr,
-    timezone,
-    enabled,
+    name: name.trim(),
+    cronExpr: cron.trim(),
+    timezone: timezone?.trim() ?? 'UTC',
+    enabled: status ? status === 'active' : (enabled ?? true),
     runTemplate: {
-      jobType,
-      goal,
+      jobType: jobType?.trim() ?? 'runtime',
+      goal: goal?.trim() ?? name,
       sourceType,
       sourceId,
     },
@@ -52,40 +53,59 @@ router.post('/', (req, res) => {
 
 // PATCH /studio/schedules/:id - Schedule aktualisieren
 router.patch('/:id', (req, res) => {
-  const current = scheduleRepository.getById(req.params.id);
-  if (!current) {
-    res.status(404).json({ error: 'Schedule not found' });
+  const idError = validateIdParam(req.params.id);
+  if (idError) {
+    res.status(400).json(createErrorResponse(idError));
     return;
   }
 
+  if (!isValidUpdateScheduleRequest(req.body)) {
+    res.status(400).json(createErrorResponse('At least one valid field is required'));
+    return;
+  }
+
+  const current = scheduleRepository.getById(req.params.id);
+  if (!current) {
+    res.status(404).json(createErrorResponse('Schedule not found'));
+    return;
+  }
+
+  const updates = req.body;
   const schedule = scheduleRepository.upsert({
     id: current.id,
-    name: req.body?.name ?? current.name,
-    cronExpr: req.body?.cron ?? current.cronExpr,
-    timezone: req.body?.timezone ?? current.timezone,
-    enabled: req.body?.status ? req.body.status === 'active' : current.enabled,
+    name: updates.name?.trim() ?? current.name,
+    cronExpr: updates.cron?.trim() ?? current.cronExpr,
+    timezone: updates.timezone?.trim() ?? current.timezone,
+    enabled: updates.status ? updates.status === 'active' : current.enabled,
     runTemplate: {
       ...current.runTemplate,
-      ...(typeof req.body?.jobType === 'string' ? { jobType: req.body.jobType } : {}),
-      ...(typeof req.body?.goal === 'string' ? { goal: req.body.goal } : {}),
-      ...(req.body?.sourceType === 'task' || req.body?.sourceType === 'swarm' ? { sourceType: req.body.sourceType } : {}),
-      ...(typeof req.body?.sourceId === 'string' ? { sourceId: req.body.sourceId } : {}),
+      ...(updates.jobType ? { jobType: updates.jobType.trim() } : {}),
+      ...(updates.goal ? { goal: updates.goal.trim() } : {}),
+      ...(updates.sourceType ? { sourceType: updates.sourceType } : {}),
+      ...(updates.sourceId ? { sourceId: updates.sourceId.trim() } : {}),
     },
     lastRunAt: current.lastRunAt,
-    nextRunAt: req.body?.cron && req.body.cron !== current.cronExpr ? null : current.nextRunAt,
+    nextRunAt: updates.cron && updates.cron !== current.cronExpr ? null : current.nextRunAt,
   });
 
   if (!schedule) {
-    res.status(404).json({ error: 'Schedule not found' });
+    res.status(404).json(createErrorResponse('Schedule not found'));
     return;
   }
+  
   res.json(mapStudioSchedule(schedule));
 });
 
 // POST /studio/schedules/:id/run-now - Schedule manuell ausführen
 router.post('/:id/run-now', async (req, res) => {
+  const idError = validateIdParam(req.params.id);
+  if (idError) {
+    res.status(400).json(createErrorResponse(idError));
+    return;
+  }
+
   if (!schedulerEngine) {
-    res.status(503).json({ error: 'Scheduler is not initialized' });
+    res.status(503).json(createErrorResponse('Scheduler is not initialized'));
     return;
   }
 
@@ -99,19 +119,27 @@ router.post('/:id/run-now', async (req, res) => {
     const updated = scheduleRepository.getById(req.params.id);
     res.json(updated ? mapStudioSchedule(updated) : result.body);
   } catch (error: unknown) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to start schedule' });
+    const message = error instanceof Error ? error.message : 'Failed to start schedule';
+    res.status(500).json(createErrorResponse(message));
   }
 });
 
 // GET /studio/schedules/:id/history - Verlauf eines Schedules abrufen
 router.get('/:id/history', (req, res) => {
-  const schedule = scheduleRepository.getById(req.params.id);
-  if (!schedule) {
-    res.status(404).json({ error: 'Schedule not found' });
+  const idError = validateIdParam(req.params.id);
+  if (idError) {
+    res.status(400).json(createErrorResponse(idError));
     return;
   }
 
-  res.json(scheduleRunRepository.listByScheduleId(req.params.id).map(mapStudioScheduleRun));
+  const schedule = scheduleRepository.getById(req.params.id);
+  if (!schedule) {
+    res.status(404).json(createErrorResponse('Schedule not found'));
+    return;
+  }
+
+  const history = scheduleRunRepository.listByScheduleId(req.params.id).map(mapStudioScheduleRun);
+  res.json(history);
 });
 
 export default router;

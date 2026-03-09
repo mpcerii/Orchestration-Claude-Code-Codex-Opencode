@@ -217,7 +217,7 @@ export class SchedulerEngine {
                         }
                     } catch (error) {
                         console.error(`[SchedulerEngine] Unexpected error in tick for schedule ${schedule.id}:`, error);
-                        this.scheduleLock.release(schedule.id);
+                        this.scheduleLock.release(scheduleId);
                     }
                 }
             }
@@ -245,9 +245,7 @@ export class SchedulerEngine {
         try {
             const template = schedule.runTemplate as unknown as ScheduleRunTemplate;
 
-            const nextRunAt = manual
-                ? schedule.nextRunAt
-                : this.computeNextRunAt(schedule.cronExpr, new Date(Date.now() + 60_000));
+            const nextRunAt = this.computeNextRunAt(schedule.cronExpr, new Date(Date.now() + 60_000));
 
             const runContext = createRunContext({
                 runId,

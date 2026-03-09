@@ -241,14 +241,14 @@ export class RunEngine {
                 payload = { ...base, type, status: 'completed', error: null };
                 break;
             case 'run.failed':
-                payload = { ...base, type, status: 'failed', error: error ?? 'Unknown error' };
+                payload = { ...base, type, status: 'failed', error: error ?? base.error ?? 'Unknown error' };
                 break;
             case 'run.cancelled':
                 payload = { ...base, type, status: 'cancelled', error: null };
                 break;
         }
 
-        this.runEventRepository?.create(run.context.runId, type, payload);
+        this.runEventRepository?.create(run.context.runId, type, payload.metadata);
         this.broadcaster?.broadcast(payload);
         for (const listener of this.lifecycleListeners) {
             listener(payload);

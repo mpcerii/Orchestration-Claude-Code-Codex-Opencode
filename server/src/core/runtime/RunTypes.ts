@@ -44,7 +44,6 @@ export interface RunFinishedPayload extends RunBasePayload {
 
 export interface RunFailedPayload extends RunBasePayload {
     type: 'run.failed';
-    error: string;
 }
 
 export interface RunCancelledPayload extends RunBasePayload {

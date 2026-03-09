@@ -1,20 +1,13 @@
 import { getStudioDb } from './db.js';
 import type { SqlParams } from './types.js';
-import { 
-  mapDataRunToAgentRun,
-  mapDataEventToStudioEvent,
-  mapDataToolCallToToolCall,
-  mapDataMessageToAgentMessage,
-  mapDataArtifactToArtifact,
-  mapDataScheduleToSchedule,
-  mapDataMemoryToMemoryEntry,
-  type StudioDataRunRow,
-  type StudioDataEventRow,
-  type StudioDataToolCallRow,
-  type StudioDataMessageRow,
-  type StudioDataArtifactRow,
-  type StudioDataScheduleRow,
-  type StudioDataMemoryRow,
+import type {
+  StudioDbRunRow,
+  StudioDbEventRow,
+  StudioDbToolCallRow,
+  StudioDbMessageRow,
+  StudioDbArtifactRow,
+  StudioDbScheduleRow,
+  StudioDbMemoryRow,
 } from './data-mappers.js';
 
 const db = getStudioDb();
@@ -28,12 +21,12 @@ function asRow<T>(sql: string, params: SqlParams = {}): T | undefined {
 }
 
 export const studioRunQueries = {
-  list(): StudioDataRunRow[] {
-    return asRows<StudioDataRunRow>('SELECT * FROM runs ORDER BY started_at DESC LIMIT 8');
+  list(): StudioDbRunRow[] {
+    return asRows<StudioDbRunRow>('SELECT * FROM runs ORDER BY started_at DESC LIMIT 8');
   },
 
-  getById(runId: string): StudioDataRunRow | undefined {
-    return asRow<StudioDataRunRow>('SELECT * FROM runs WHERE id = :runId', { runId });
+  getById(runId: string): StudioDbRunRow | undefined {
+    return asRow<StudioDbRunRow>('SELECT * FROM runs WHERE id = :runId', { runId });
   },
   
   create(sessionId: string, goal: string): void {
@@ -75,15 +68,15 @@ export const studioRunQueries = {
 };
 
 export const studioEventQueries = {
-  listByRunId(runId: string): StudioDataEventRow[] {
-    return asRows<StudioDataEventRow>('SELECT * FROM events WHERE run_id = :runId ORDER BY created_at DESC', { runId });
+  listByRunId(runId: string): StudioDbEventRow[] {
+    return asRows<StudioDbEventRow>('SELECT * FROM events WHERE run_id = :runId ORDER BY created_at DESC', { runId });
   },
 
-  listRecent(limit: number = 40): StudioDataEventRow[] {
-    return asRows<StudioDataEventRow>('SELECT * FROM events ORDER BY created_at DESC LIMIT :limit', { limit });
+  listRecent(limit: number = 40): StudioDbEventRow[] {
+    return asRows<StudioDbEventRow>('SELECT * FROM events ORDER BY created_at DESC LIMIT :limit', { limit });
   },
 
-  create(input: Omit<StudioDataEventRow, 'id' | 'created_at'>): string {
+  create(input: Omit<StudioDbEventRow, 'id' | 'created_at'>): string {
     const eventId = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     
@@ -105,15 +98,15 @@ export const studioEventQueries = {
 };
 
 export const studioToolCallQueries = {
-  listByRunId(runId: string): StudioDataToolCallRow[] {
-    return asRows<StudioDataToolCallRow>('SELECT * FROM tool_calls WHERE run_id = :runId ORDER BY started_at DESC', { runId });
+  listByRunId(runId: string): StudioDbToolCallRow[] {
+    return asRows<StudioDbToolCallRow>('SELECT * FROM tool_calls WHERE run_id = :runId ORDER BY started_at DESC', { runId });
   },
 
-  listRecent(limit: number = 20): StudioDataToolCallRow[] {
-    return asRows<StudioDataToolCallRow>('SELECT * FROM tool_calls ORDER BY started_at DESC LIMIT :limit', { limit });
+  listRecent(limit: number = 20): StudioDbToolCallRow[] {
+    return asRows<StudioDbToolCallRow>('SELECT * FROM tool_calls ORDER BY started_at DESC LIMIT :limit', { limit });
   },
 
-  create(input: Omit<StudioDataToolCallRow, 'id'>): string {
+  create(input: Omit<StudioDbToolCallRow, 'id'>): string {
     const toolCallId = crypto.randomUUID();
     
     db.prepare(`
@@ -129,15 +122,15 @@ export const studioToolCallQueries = {
 };
 
 export const studioMessageQueries = {
-  listByRunId(runId: string): StudioDataMessageRow[] {
-    return asRows<StudioDataMessageRow>('SELECT * FROM agent_messages WHERE run_id = :runId ORDER BY created_at DESC', { runId });
+  listByRunId(runId: string): StudioDbMessageRow[] {
+    return asRows<StudioDbMessageRow>('SELECT * FROM agent_messages WHERE run_id = :runId ORDER BY created_at DESC', { runId });
   },
 
-  listRecent(limit: number = 20): StudioDataMessageRow[] {
-    return asRows<StudioDataMessageRow>('SELECT * FROM agent_messages ORDER BY created_at DESC LIMIT :limit', { limit });
+  listRecent(limit: number = 20): StudioDbMessageRow[] {
+    return asRows<StudioDbMessageRow>('SELECT * FROM agent_messages ORDER BY created_at DESC LIMIT :limit', { limit });
   },
 
-  create(input: Omit<StudioDataMessageRow, 'id' | 'created_at'>): string {
+  create(input: Omit<StudioDbMessageRow, 'id' | 'created_at'>): string {
     const messageId = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     
@@ -155,15 +148,15 @@ export const studioMessageQueries = {
 };
 
 export const studioArtifactQueries = {
-  listByRunId(runId: string): StudioDataArtifactRow[] {
-    return asRows<StudioDataArtifactRow>('SELECT * FROM artifacts WHERE run_id = :runId ORDER BY created_at DESC', { runId });
+  listByRunId(runId: string): StudioDbArtifactRow[] {
+    return asRows<StudioDbArtifactRow>('SELECT * FROM artifacts WHERE run_id = :runId ORDER BY created_at DESC', { runId });
   },
 
-  listRecent(limit: number = 12): StudioDataArtifactRow[] {
-    return asRows<StudioDataArtifactRow>('SELECT * FROM artifacts ORDER BY created_at DESC LIMIT :limit', { limit });
+  listRecent(limit: number = 12): StudioDbArtifactRow[] {
+    return asRows<StudioDbArtifactRow>('SELECT * FROM artifacts ORDER BY created_at DESC LIMIT :limit', { limit });
   },
 
-  create(input: Omit<StudioDataArtifactRow, 'id' | 'created_at'>): string {
+  create(input: Omit<StudioDbArtifactRow, 'id' | 'created_at'>): string {
     const artifactId = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     
@@ -185,15 +178,15 @@ export const studioArtifactQueries = {
 };
 
 export const studioScheduleQueries = {
-  list(): StudioDataScheduleRow[] {
-    return asRows<StudioDataScheduleRow>('SELECT * FROM schedules ORDER BY name');
+  list(): StudioDbScheduleRow[] {
+    return asRows<StudioDbScheduleRow>('SELECT * FROM schedules ORDER BY name');
   },
 
-  getById(scheduleId: string): StudioDataScheduleRow | undefined {
-    return asRow<StudioDataScheduleRow>('SELECT * FROM schedules WHERE id = :scheduleId', { scheduleId });
+  getById(scheduleId: string): StudioDbScheduleRow | undefined {
+    return asRow<StudioDbScheduleRow>('SELECT * FROM schedules WHERE id = :scheduleId', { scheduleId });
   },
 
-  create(input: Omit<StudioDataScheduleRow, 'id'>): string {
+  create(input: Omit<StudioDbScheduleRow, 'id'>): string {
     const scheduleId = crypto.randomUUID();
     
     db.prepare(`
@@ -207,8 +200,7 @@ export const studioScheduleQueries = {
     return scheduleId;
   },
 
-  update(scheduleId: string, updates: Partial<Omit<StudioDataScheduleRow, 'id'>>): void {
-    // Build dynamic update query
+  update(scheduleId: string, updates: Partial<Omit<StudioDbScheduleRow, 'id'>>): void {
     const updateFields: string[] = [];
     const params: SqlParams = { scheduleId };
     
@@ -230,13 +222,13 @@ export const studioScheduleQueries = {
 };
 
 export const studioMemoryQueries = {
-  listRecent(limit: number = 12): StudioDataMemoryRow[] {
-    return asRows<StudioDataMemoryRow>('SELECT * FROM memory_entries ORDER BY created_at DESC LIMIT :limit', { limit });
+  listRecent(limit: number = 12): StudioDbMemoryRow[] {
+    return asRows<StudioDbMemoryRow>('SELECT * FROM memory_entries ORDER BY created_at DESC LIMIT :limit', { limit });
   },
 
-  search(query: string): StudioDataMemoryRow[] {
+  search(query: string): StudioDbMemoryRow[] {
     const normalized = `%${query.toLowerCase()}%`;
-    return asRows<StudioDataMemoryRow>(
+    return asRows<StudioDbMemoryRow>(
       `
         SELECT * FROM memory_entries
         WHERE lower(title) LIKE :normalized OR lower(content) LIKE :normalized
@@ -247,7 +239,7 @@ export const studioMemoryQueries = {
     );
   },
 
-  create(input: Omit<StudioDataMemoryRow, 'id' | 'created_at'>): string {
+  create(input: Omit<StudioDbMemoryRow, 'id' | 'created_at'>): string {
     const memoryId = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     
