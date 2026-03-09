@@ -47,5 +47,15 @@ export function runSqliteMigrations(db: DatabaseSync): void {
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS schedule_runs (
+            id TEXT PRIMARY KEY,
+            schedule_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            error TEXT
+        );
     `);
 }

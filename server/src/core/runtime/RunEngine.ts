@@ -20,8 +20,26 @@ interface RunEngineDependencies {
     runEventRepository?: RunEventRepository;
 }
 
+export interface RunLifecycleEvent extends Record<string, unknown> {
+    type: 'run.created' | 'run.started' | 'run.finished' | 'run.failed' | 'run.cancelled';
+    runId: string;
+    runType: RunContext['runType'];
+    sourceId: string;
+    status: RunLifecycleStatus;
+    rootGoal: string;
+    startedAt: string;
+    agentChain: string[];
+    artifacts: string[];
+    metadata: Record<string, unknown>;
+    error: string | null;
+    timestamp: string;
+    activeRuns: number;
+    runtimeStateBound: boolean;
+}
+
 export class RunEngine {
     private readonly runs = new Map<string, ManagedRun>();
+    private readonly lifecycleListeners = new Set<(event: RunLifecycleEvent) => void>();
     private runtimeState?: RuntimeState;
     private broadcaster?: Broadcaster;
     private runRepository?: RunRepository;
@@ -134,8 +152,15 @@ export class RunEngine {
         );
     }
 
+    onLifecycleEvent(listener: (event: RunLifecycleEvent) => void): () => void {
+        this.lifecycleListeners.add(listener);
+        return () => {
+            this.lifecycleListeners.delete(listener);
+        };
+    }
+
     private emit(type: 'run.created' | 'run.started' | 'run.finished' | 'run.failed' | 'run.cancelled', run: ManagedRun): void {
-        const payload = {
+        const payload: RunLifecycleEvent = {
             type,
             runId: run.context.runId,
             runType: run.context.runType,
@@ -154,6 +179,9 @@ export class RunEngine {
 
         this.runEventRepository?.create(run.context.runId, type, payload);
         this.broadcaster?.broadcast(payload);
+        for (const listener of this.lifecycleListeners) {
+            listener(payload);
+        }
     }
 }
 

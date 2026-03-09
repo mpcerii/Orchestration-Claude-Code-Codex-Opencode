@@ -33,6 +33,11 @@ export class ScheduleRepository {
         return (db.prepare('SELECT * FROM schedules ORDER BY created_at DESC').all() as unknown as ScheduleRow[]).map(mapSchedule);
     }
 
+    listEnabled(): PersistedSchedule[] {
+        const db = getSqliteDb();
+        return (db.prepare('SELECT * FROM schedules WHERE enabled = 1 ORDER BY created_at DESC').all() as unknown as ScheduleRow[]).map(mapSchedule);
+    }
+
     getById(scheduleId: string): PersistedSchedule | null {
         const db = getSqliteDb();
         const row = db.prepare('SELECT * FROM schedules WHERE id = :scheduleId').get({ scheduleId }) as ScheduleRow | undefined;
@@ -84,6 +89,63 @@ export class ScheduleRepository {
         });
 
         return this.getById(id)!;
+    }
+
+    markRunStarted(scheduleId: string, startedAt: string, nextRunAt: string | null): void {
+        const db = getSqliteDb();
+        db.prepare(`
+            UPDATE schedules
+            SET last_run_at = :startedAt,
+                next_run_at = :nextRunAt,
+                updated_at = :updatedAt
+            WHERE id = :scheduleId
+        `).run({
+            scheduleId,
+            startedAt,
+            nextRunAt,
+            updatedAt: startedAt,
+        });
+    }
+
+    markRunFinished(scheduleId: string, finishedAt: string): void {
+        const db = getSqliteDb();
+        db.prepare(`
+            UPDATE schedules
+            SET updated_at = :finishedAt
+            WHERE id = :scheduleId
+        `).run({
+            scheduleId,
+            finishedAt,
+        });
+    }
+
+    updateNextRunAt(scheduleId: string, nextRunAt: string | null): void {
+        const db = getSqliteDb();
+        const updatedAt = new Date().toISOString();
+        db.prepare(`
+            UPDATE schedules
+            SET next_run_at = :nextRunAt,
+                updated_at = :updatedAt
+            WHERE id = :scheduleId
+        `).run({
+            scheduleId,
+            nextRunAt,
+            updatedAt,
+        });
+    }
+
+    updateLastRunAt(scheduleId: string, lastRunAt: string): void {
+        const db = getSqliteDb();
+        db.prepare(`
+            UPDATE schedules
+            SET last_run_at = :lastRunAt,
+                updated_at = :updatedAt
+            WHERE id = :scheduleId
+        `).run({
+            scheduleId,
+            lastRunAt,
+            updatedAt: lastRunAt,
+        });
     }
 }
 
