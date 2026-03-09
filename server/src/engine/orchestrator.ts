@@ -3,6 +3,8 @@
 // ============================================================
 
 import type { Agent, AgentTree, TreeNode, Task, TaskOutput, WsMessage } from '../types.js';
+import type { RunContext } from '../core/runtime/RunContext.js';
+import { runEngine } from '../core/runtime/RunEngine.js';
 import { runAgent } from './cli-runner.js';
 import { getAgentById } from '../data/store.js';
 
@@ -15,25 +17,32 @@ type WsBroadcast = (msg: WsMessage) => void;
 export async function executeTask(
     task: Task,
     tree: AgentTree,
-    broadcast: WsBroadcast
+    broadcast: WsBroadcast,
+    runContext: RunContext
 ): Promise<TaskOutput[]> {
+    runEngine.startRun(runContext);
     const outputs: TaskOutput[] = [];
 
-    // Ensure there is always a valid prompt to begin with
-    const initialPrompt = task.prompt?.trim() || task.description?.trim() || task.title;
+    try {
+        const initialPrompt = task.prompt?.trim() || task.description?.trim() || task.title;
 
-    // Walk each root node with the task's initial prompt
-    for (const rootNode of tree.rootNodes) {
-        await walkNode(rootNode, initialPrompt, task, tree, outputs, broadcast);
+        for (const rootNode of tree.rootNodes) {
+            await walkNode(rootNode, initialPrompt, task, tree, outputs, broadcast, runContext);
+        }
+
+        broadcast({
+            type: 'task_complete',
+            taskId: task.id,
+            data: `Task "${task.title}" completed with ${outputs.length} agent(s).`,
+        });
+
+        runEngine.finishRun(runContext.runId);
+        return outputs;
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        runEngine.failRun(runContext.runId, message);
+        throw error;
     }
-
-    broadcast({
-        type: 'task_complete',
-        taskId: task.id,
-        data: `Task "${task.title}" completed with ${outputs.length} agent(s).`,
-    });
-
-    return outputs;
 }
 
 /**
@@ -47,7 +56,8 @@ async function walkNode(
     task: Task,
     tree: AgentTree,
     outputs: TaskOutput[],
-    broadcast: WsBroadcast
+    broadcast: WsBroadcast,
+    runContext: RunContext
 ): Promise<string> {
     const agent = getAgentById(node.agentId);
     if (!agent) {
@@ -55,6 +65,8 @@ async function walkNode(
         broadcast({ type: 'agent_error', taskId: task.id, agentId: node.agentId, error: errMsg });
         return errMsg;
     }
+
+    runContext.agentChain.push(agent.name);
 
     // Prepend system context about the agent's role
     const enrichedPrompt = buildEnrichedPrompt(agent, input);
@@ -95,13 +107,13 @@ async function walkNode(
         if (node.executionMode === 'parallel') {
             // Run all children in parallel
             await Promise.all(
-                node.children.map((child) => walkNode(child, output, task, tree, outputs, broadcast))
+                node.children.map((child) => walkNode(child, output, task, tree, outputs, broadcast, runContext))
             );
         } else {
             // Run children sequentially – each gets the accumulated context
             let childInput = output;
             for (const child of node.children) {
-                childInput = await walkNode(child, childInput, task, tree, outputs, broadcast);
+                childInput = await walkNode(child, childInput, task, tree, outputs, broadcast, runContext);
             }
         }
     }

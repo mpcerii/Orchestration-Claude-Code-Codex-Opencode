@@ -1,4 +1,5 @@
 import * as store from '../data/store.js';
+import { createRunContext } from '../core/runtime/RunContext.js';
 import { executeTask } from '../engine/orchestrator.js';
 import type { TaskSocketExecutionContext, TaskExecutionContext } from '../core/runtime/ExecutionContexts.js';
 
@@ -23,10 +24,20 @@ export async function startTaskExecution(taskId: string, context: TaskExecutionC
 
     store.updateTask(taskId, { status: 'in_progress' });
     context.runtimeState.startTask(taskId);
+    const runContext = createRunContext({
+        runId: taskId,
+        rootGoal: task.prompt?.trim() || task.description?.trim() || task.title,
+        metadata: {
+            kind: 'task',
+            taskId: task.id,
+            treeId: tree.id,
+            workspacePath: tree.workspacePath,
+        },
+    });
 
     void (async () => {
         try {
-            const outputs = await executeTask(task, tree, context.broadcaster.broadcastLegacy);
+            const outputs = await executeTask(task, tree, context.broadcaster.broadcastLegacy, runContext);
             store.updateTask(taskId, { status: 'done', outputs });
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unknown error';

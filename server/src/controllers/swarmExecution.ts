@@ -1,4 +1,5 @@
 import * as store from '../data/store.js';
+import { createRunContext } from '../core/runtime/RunContext.js';
 import { executeSwarm } from '../engine/swarm-orchestrator.js';
 import type { SwarmExecutionContext } from '../core/runtime/ExecutionContexts.js';
 
@@ -14,6 +15,17 @@ export async function startSwarmExecution(swarmId: string, context: SwarmExecuti
 
     store.updateSwarm(swarmId, { status: 'running', rounds: [], currentRound: 0 });
     context.runtimeState.startSwarm(swarmId);
+    const runContext = createRunContext({
+        runId: swarmId,
+        rootGoal: swarm.description?.trim() || swarm.name,
+        metadata: {
+            kind: 'swarm',
+            swarmId: swarm.id,
+            workspacePath: swarm.workspacePath,
+            minRounds: swarm.minRounds,
+            maxRounds: swarm.maxRounds,
+        },
+    });
 
     void (async () => {
         try {
@@ -22,7 +34,8 @@ export async function startSwarmExecution(swarmId: string, context: SwarmExecuti
                 context.broadcaster.broadcastLegacy,
                 (updates) => {
                     store.updateSwarm(swarmId, updates);
-                }
+                },
+                runContext
             );
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unknown error';

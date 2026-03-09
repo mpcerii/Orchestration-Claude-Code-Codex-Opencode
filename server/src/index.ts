@@ -4,6 +4,7 @@ import { createHttpServer } from './app/createHttpServer.js';
 import { createSwarmExecutionRouter } from './adapters/http/swarmExecution.routes.js';
 import { createTaskExecutionRouter } from './adapters/http/taskExecution.routes.js';
 import { createWebSocketServer } from './adapters/ws/createWebSocketServer.js';
+import { runEngine } from './core/runtime/RunEngine.js';
 import { RuntimeState } from './core/runtime/RuntimeState.js';
 import { startTelegramBot } from './telegram/index.js';
 
@@ -14,6 +15,7 @@ const app = createApp();
 const port = Number(process.env.PORT ?? 3001);
 const server = createHttpServer(app);
 const { broadcaster } = createWebSocketServer(server, runtimeState);
+runEngine.configure({ runtimeState, broadcaster });
 
 app.use('/api', createTaskExecutionRouter({ runtimeState, broadcaster }));
 app.use('/api', createSwarmExecutionRouter({ runtimeState, broadcaster }));
