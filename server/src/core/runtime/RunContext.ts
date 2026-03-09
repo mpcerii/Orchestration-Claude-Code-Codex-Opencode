@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import type { RunType } from './RunTypes.js';
 
 export interface RunContext {
     runId: string;
+    runType: RunType;
+    sourceId: string;
+    startedAt: string;
     rootGoal: string;
-    startTime: string;
     agentChain: string[];
     artifacts: string[];
     metadata: Record<string, unknown>;
@@ -11,13 +14,17 @@ export interface RunContext {
 
 export function createRunContext(input: {
     runId?: string;
+    runType: RunType;
+    sourceId: string;
     rootGoal: string;
     metadata?: Record<string, unknown>;
 }): RunContext {
     return {
         runId: input.runId ?? randomUUID(),
+        runType: input.runType,
+        sourceId: input.sourceId,
+        startedAt: new Date().toISOString(),
         rootGoal: input.rootGoal,
-        startTime: new Date().toISOString(),
         agentChain: [],
         artifacts: [],
         metadata: input.metadata ?? {},

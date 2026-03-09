@@ -1,19 +1,11 @@
 import type { Broadcaster } from '../events/Broadcaster.js';
 import type { RunContext } from './RunContext.js';
+import type { RunLifecycleStatus } from './RunTypes.js';
 import type { RuntimeState } from './RuntimeState.js';
-
-export enum RunStatus {
-    RUN_CREATED = 'RUN_CREATED',
-    RUN_STARTED = 'RUN_STARTED',
-    RUN_RUNNING = 'RUN_RUNNING',
-    RUN_FAILED = 'RUN_FAILED',
-    RUN_COMPLETED = 'RUN_COMPLETED',
-    RUN_CANCELLED = 'RUN_CANCELLED',
-}
 
 export interface ManagedRun {
     context: RunContext;
-    status: RunStatus;
+    status: RunLifecycleStatus;
     startedAt: string | null;
     finishedAt: string | null;
     error: string | null;
@@ -42,7 +34,7 @@ export class RunEngine {
 
         const run: ManagedRun = {
             context,
-            status: RunStatus.RUN_CREATED,
+            status: 'created',
             startedAt: null,
             finishedAt: null,
             error: null,
@@ -55,10 +47,9 @@ export class RunEngine {
 
     startRun(context: RunContext): ManagedRun {
         const run = this.registerRun(context);
-        run.status = RunStatus.RUN_STARTED;
-        run.startedAt = run.startedAt ?? new Date().toISOString();
+        run.status = 'running';
+        run.startedAt = run.startedAt ?? context.startedAt;
         this.emit('run.started', run);
-        run.status = RunStatus.RUN_RUNNING;
         return run;
     }
 
@@ -68,7 +59,7 @@ export class RunEngine {
             return null;
         }
 
-        run.status = RunStatus.RUN_COMPLETED;
+        run.status = 'completed';
         run.finishedAt = new Date().toISOString();
         this.emit('run.finished', run);
         return run;
@@ -80,7 +71,7 @@ export class RunEngine {
             return null;
         }
 
-        run.status = RunStatus.RUN_FAILED;
+        run.status = 'failed';
         run.error = error ?? null;
         run.finishedAt = new Date().toISOString();
         this.emit('run.failed', run);
@@ -91,21 +82,34 @@ export class RunEngine {
         return this.runs.get(runId) ?? null;
     }
 
+    cancelRun(runId: string): ManagedRun | null {
+        const run = this.runs.get(runId);
+        if (!run) {
+            return null;
+        }
+
+        run.status = 'cancelled';
+        run.finishedAt = new Date().toISOString();
+        this.emit('run.cancelled', run);
+        return run;
+    }
+
     listActiveRuns(): ManagedRun[] {
         return [...this.runs.values()].filter((run) =>
-            run.status === RunStatus.RUN_CREATED ||
-            run.status === RunStatus.RUN_STARTED ||
-            run.status === RunStatus.RUN_RUNNING
+            run.status === 'created' ||
+            run.status === 'running'
         );
     }
 
-    private emit(type: 'run.created' | 'run.started' | 'run.finished' | 'run.failed', run: ManagedRun): void {
+    private emit(type: 'run.created' | 'run.started' | 'run.finished' | 'run.failed' | 'run.cancelled', run: ManagedRun): void {
         this.broadcaster?.broadcast({
             type,
             runId: run.context.runId,
+            runType: run.context.runType,
+            sourceId: run.context.sourceId,
             status: run.status,
             rootGoal: run.context.rootGoal,
-            startTime: run.context.startTime,
+            startedAt: run.context.startedAt,
             agentChain: run.context.agentChain,
             artifacts: run.context.artifacts,
             metadata: run.context.metadata,

@@ -1,5 +1,6 @@
 import * as store from '../data/store.js';
 import { createRunContext } from '../core/runtime/RunContext.js';
+import { runEngine } from '../core/runtime/RunEngine.js';
 import { executeSwarm } from '../engine/swarm-orchestrator.js';
 import type { SwarmExecutionContext } from '../core/runtime/ExecutionContexts.js';
 
@@ -17,6 +18,8 @@ export async function startSwarmExecution(swarmId: string, context: SwarmExecuti
     context.runtimeState.startSwarm(swarmId);
     const runContext = createRunContext({
         runId: swarmId,
+        runType: 'swarm',
+        sourceId: swarm.id,
         rootGoal: swarm.description?.trim() || swarm.name,
         metadata: {
             kind: 'swarm',
@@ -26,6 +29,7 @@ export async function startSwarmExecution(swarmId: string, context: SwarmExecuti
             maxRounds: swarm.maxRounds,
         },
     });
+    runEngine.startRun(runContext);
 
     void (async () => {
         try {
@@ -34,13 +38,14 @@ export async function startSwarmExecution(swarmId: string, context: SwarmExecuti
                 context.broadcaster.broadcastLegacy,
                 (updates) => {
                     store.updateSwarm(swarmId, updates);
-                },
-                runContext
+                }
             );
+            runEngine.finishRun(runContext.runId);
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unknown error';
             store.updateSwarm(swarmId, { status: 'error' });
             context.broadcaster.broadcastLegacy({ type: 'swarm_error', taskId: swarmId, error: message });
+            runEngine.failRun(runContext.runId, message);
         } finally {
             context.runtimeState.finishSwarm(swarmId);
         }
@@ -52,6 +57,7 @@ export async function startSwarmExecution(swarmId: string, context: SwarmExecuti
 export function stopSwarmExecution(swarmId: string, context: SwarmExecutionContext): { status: number; body: unknown } {
     store.updateSwarm(swarmId, { status: 'completed' });
     context.runtimeState.finishSwarm(swarmId);
+    runEngine.cancelRun(swarmId);
     context.broadcaster.broadcastLegacy({ type: 'swarm_complete', taskId: swarmId, data: 'Swarm manually stopped.' });
     return { status: 200, body: { status: 'stopped' } };
 }

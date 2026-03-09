@@ -1,5 +1,6 @@
 import * as store from '../data/store.js';
 import { createRunContext } from '../core/runtime/RunContext.js';
+import { runEngine } from '../core/runtime/RunEngine.js';
 import { executeTask } from '../engine/orchestrator.js';
 import type { TaskSocketExecutionContext, TaskExecutionContext } from '../core/runtime/ExecutionContexts.js';
 
@@ -26,6 +27,8 @@ export async function startTaskExecution(taskId: string, context: TaskExecutionC
     context.runtimeState.startTask(taskId);
     const runContext = createRunContext({
         runId: taskId,
+        runType: 'task',
+        sourceId: task.id,
         rootGoal: task.prompt?.trim() || task.description?.trim() || task.title,
         metadata: {
             kind: 'task',
@@ -34,15 +37,18 @@ export async function startTaskExecution(taskId: string, context: TaskExecutionC
             workspacePath: tree.workspacePath,
         },
     });
+    runEngine.startRun(runContext);
 
     void (async () => {
         try {
-            const outputs = await executeTask(task, tree, context.broadcaster.broadcastLegacy, runContext);
+            const outputs = await executeTask(task, tree, context.broadcaster.broadcastLegacy);
             store.updateTask(taskId, { status: 'done', outputs });
+            runEngine.finishRun(runContext.runId);
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unknown error';
             store.updateTask(taskId, { status: 'review' });
             context.broadcaster.broadcastLegacy({ type: 'agent_error', taskId, error: message });
+            runEngine.failRun(runContext.runId, message);
         } finally {
             context.runtimeState.finishTask(taskId);
         }

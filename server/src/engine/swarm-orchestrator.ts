@@ -25,8 +25,6 @@
 // ============================================================
 
 import type { Swarm, SwarmAgent, SwarmRound, WsMessage } from '../types.js';
-import type { RunContext } from '../core/runtime/RunContext.js';
-import { runEngine } from '../core/runtime/RunEngine.js';
 import { runAgent } from './cli-runner.js';
 import { getAgentById, getSwarmById } from '../data/store.js';
 
@@ -47,10 +45,8 @@ const MAX_FEEDBACK_ITERATIONS = 3;
 export async function executeSwarm(
     swarm: Swarm,
     broadcast: WsBroadcast,
-    onUpdate: (updates: Partial<Swarm>) => void,
-    runContext: RunContext
+    onUpdate: (updates: Partial<Swarm>) => void
 ): Promise<void> {
-    runEngine.startRun(runContext);
     const { agents, workspacePath, maxRounds } = swarm;
     const minRounds = swarm.minRounds || 1;
 
@@ -59,7 +55,6 @@ export async function executeSwarm(
     if (!coordinatorSwarmAgent) {
         broadcast({ type: 'swarm_error', taskId: swarm.id, error: 'No coordinator agent found in swarm.' });
         onUpdate({ status: 'error' });
-        runEngine.failRun(runContext.runId, 'No coordinator agent found in swarm.');
         return;
     }
 
@@ -67,7 +62,6 @@ export async function executeSwarm(
     if (!coordinatorAgent) {
         broadcast({ type: 'swarm_error', taskId: swarm.id, error: `Coordinator agent "${coordinatorSwarmAgent.agentId}" not found.` });
         onUpdate({ status: 'error' });
-        runEngine.failRun(runContext.runId, `Coordinator agent "${coordinatorSwarmAgent.agentId}" not found.`);
         return;
     }
 
@@ -126,7 +120,6 @@ export async function executeSwarm(
             const currentSwarm = getSwarmById(swarm.id);
             if (currentSwarm && currentSwarm.status !== 'running') {
                 broadcast({ type: 'swarm_complete', taskId: swarm.id, data: 'Swarm stopped.' });
-                runEngine.finishRun(runContext.runId);
                 return;
             }
 
@@ -158,7 +151,6 @@ export async function executeSwarm(
             const coordinatorOutput = await runAgentAsync(
                 coordinatorAgent, coordinatorPrompt, workspacePath, swarm.id, broadcast
             );
-            runContext.agentChain.push(coordinatorAgent.name);
 
             broadcast({
                 type: 'agent_complete',
@@ -196,7 +188,6 @@ export async function executeSwarm(
                         data: `Swarm "${swarm.name}" completed after ${currentRound} round(s).`,
                     });
                     onUpdate({ rounds: [...rounds], currentRound, status: 'completed' });
-                    runEngine.finishRun(runContext.runId);
                     return;
                 }
             }
@@ -259,7 +250,6 @@ export async function executeSwarm(
                     if (result) {
                         agentOutputs.set(independent[i].agentId, result.output);
                         rounds.push(result.round);
-                        runContext.agentChain.push(result.round.agentName);
 
                         // Track feedback iterations
                         trackFeedbackStatus(result.output, independent[i].agentId, feedbackCount);
@@ -287,7 +277,6 @@ export async function executeSwarm(
                 if (result) {
                     agentOutputs.set(delegation.agentId, result.output);
                     rounds.push(result.round);
-                    runContext.agentChain.push(result.round.agentName);
 
                     trackFeedbackStatus(result.output, delegation.agentId, feedbackCount);
                 }
@@ -304,13 +293,11 @@ export async function executeSwarm(
             data: `Swarm "${swarm.name}" reached maximum rounds (${maxRounds}). Stopping.`,
         });
         onUpdate({ rounds: [...rounds], currentRound, status: 'completed' });
-        runEngine.finishRun(runContext.runId);
 
     } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         broadcast({ type: 'swarm_error', taskId: swarm.id, error: `Swarm error: ${errorMsg}` });
         onUpdate({ rounds: [...rounds], currentRound, status: 'error' });
-        runEngine.failRun(runContext.runId, errorMsg);
     }
 }
 
