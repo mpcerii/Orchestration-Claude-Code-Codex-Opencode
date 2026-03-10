@@ -45,8 +45,7 @@ export class RunEventRepository {
 
     listByRunId(runId: string): PersistedRunEvent[] {
         const db = getSqliteDb();
-        return (db.prepare('SELECT * FROM run_events WHERE run_id = :runId ORDER BY created_at ASC').all({ runId }) as unknown as RunEventRow[])
-            .map(mapRunEvent);
+        return (db.prepare('SELECT * FROM run_events WHERE run_id = :runId ORDER BY created_at ASC').all({ runId }) as RunEventRow[]).map(mapRunEvent);
     }
 
     deleteById(id: string): boolean {

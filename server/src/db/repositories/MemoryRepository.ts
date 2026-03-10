@@ -75,10 +75,10 @@ export class MemoryRepository {
                 SELECT * FROM memory_entries
                 WHERE scope_type = :scopeType AND scope_id = :scopeId
                 ORDER BY created_at DESC
-            `).all({ scopeType, scopeId }) as unknown as MemoryRow[]).map(mapMemory);
+            `).all({ scopeType, scopeId }) as MemoryRow[]).map(mapMemory);
         }
 
-        return (db.prepare('SELECT * FROM memory_entries ORDER BY created_at DESC').all() as unknown as MemoryRow[]).map(mapMemory);
+        return (db.prepare('SELECT * FROM memory_entries ORDER BY created_at DESC').all() as MemoryRow[]).map(mapMemory);
     }
 
     search(query: string): PersistedMemoryEntry[] {
@@ -87,7 +87,7 @@ export class MemoryRepository {
             SELECT * FROM memory_entries
             WHERE lower(title) LIKE :pattern OR lower(content) LIKE :pattern
             ORDER BY created_at DESC
-        `).all({ pattern: `%${query.toLowerCase()}%` }) as unknown as MemoryRow[]).map(mapMemory);
+        `).all({ pattern: `%${query.toLowerCase()}%` }) as MemoryRow[]).map(mapMemory);
     }
 
     deleteById(memoryId: string): boolean {

@@ -30,12 +30,12 @@ export interface PersistedSchedule {
 export class ScheduleRepository {
     list(): PersistedSchedule[] {
         const db = getSqliteDb();
-        return (db.prepare('SELECT * FROM schedules ORDER BY created_at DESC').all() as unknown as ScheduleRow[]).map(mapSchedule);
+        return (db.prepare('SELECT * FROM schedules ORDER BY created_at DESC').all() as ScheduleRow[]).map(mapSchedule);
     }
 
     listEnabled(): PersistedSchedule[] {
         const db = getSqliteDb();
-        return (db.prepare('SELECT * FROM schedules WHERE enabled = 1 ORDER BY created_at DESC').all() as unknown as ScheduleRow[]).map(mapSchedule);
+        return (db.prepare('SELECT * FROM schedules WHERE enabled = 1 ORDER BY created_at DESC').all() as ScheduleRow[]).map(mapSchedule);
     }
 
     getById(scheduleId: string): PersistedSchedule | null {

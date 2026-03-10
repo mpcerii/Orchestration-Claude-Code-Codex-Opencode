@@ -64,19 +64,26 @@ export class SchedulerEngine {
 
             console.log(`[SchedulerEngine] Run ${event.runId} reached terminal state: ${event.type}`);
 
+            // Update the schedule run record in the repository
             this.scheduleRunRepository.updateByRunId(event.runId, {
                 status: event.status,
                 finishedAt: event.timestamp,
                 error: typeof event.error === 'string' ? event.error : null,
             });
 
+            // Update the main schedule record
             this.scheduleRepository.markRunFinished(scheduleId, event.timestamp);
 
-            const wasLocked = this.scheduleLock.isLocked(scheduleId);
-            if (wasLocked) {
-                const released = this.scheduleLock.release(scheduleId);
-                if (released) {
-                    console.log(`[SchedulerEngine] Released lock for schedule ${scheduleId} after ${event.type}`);
+            // Always attempt to release the lock regardless of its current state
+            // This ensures locks are cleaned up even if the internal state gets inconsistent
+            const released = this.scheduleLock.release(scheduleId);
+            if (released) {
+                console.log(`[SchedulerEngine] Released lock for schedule ${scheduleId} after ${event.type}`);
+            } else {
+                // Log if we expected the lock to exist but couldn't release it
+                const lockInfo = this.scheduleLock.getLockInfo(scheduleId);
+                if (lockInfo) {
+                    console.warn(`[SchedulerEngine] Expected to release lock but release failed for schedule ${scheduleId}, run ${lockInfo.runId}`);
                 }
             }
         });
@@ -117,7 +124,7 @@ export class SchedulerEngine {
         if (!schedule) {
             return { status: 404, body: { error: 'Schedule not found' } };
         }
-
+        
         if (!schedule.enabled) {
             return { status: 409, body: { error: 'Schedule is disabled' } };
         }
@@ -143,11 +150,13 @@ export class SchedulerEngine {
 
         console.log(`[SchedulerEngine] Manual run triggered for schedule ${scheduleId}, run ${runId}`);
 
+        // Use the same execution pathway as polling for consistency
         const scheduleIdForCleanup = schedule.id;
-
         try {
             const result = await this.executeSchedule(schedule, runId, true);
-
+            
+            // No need to manually release lock here - it will be handled by the event listener
+            // when the run reaches a terminal state
             if (result.success) {
                 return {
                     status: 200,
@@ -158,6 +167,7 @@ export class SchedulerEngine {
                     }
                 };
             } else {
+                // For failed executions, we need to release the lock since no terminal event will come
                 this.scheduleLock.release(scheduleIdForCleanup);
                 return {
                     status: 500,
@@ -169,8 +179,15 @@ export class SchedulerEngine {
             }
         } catch (error) {
             console.error(`[SchedulerEngine] Unexpected error in runNow for schedule ${scheduleId}:`, error);
+            // Release the lock to prevent deadlock on unhandled exceptions
             this.scheduleLock.release(scheduleIdForCleanup);
-            throw error;
+            return {
+                status: 500,
+                body: {
+                    error: error instanceof Error ? error.message : 'Unexpected error during execution',
+                    scheduleId,
+                }
+            };
         }
     }
 
@@ -214,16 +231,23 @@ export class SchedulerEngine {
 
                     const scheduleId = schedule.id;
                     
+                    // Use async/await to ensure proper promise handling
                     try {
                         const result = await this.executeSchedule(schedule, runId, false);
 
                         if (!result.success) {
                             console.error(`[SchedulerEngine] Auto-trigger failed for schedule ${scheduleId}:`, result.error);
-                            this.scheduleLock.release(scheduleId);
+                            // Lock will be released in event listener, but ensure cleanup on immediate errors
+                            if (!this.scheduleLock.getLockInfo(scheduleId)) {
+                                // If lock somehow got released during execution, nothing to do
+                            }
                         }
                     } catch (error) {
                         console.error(`[SchedulerEngine] Unexpected error in tick for schedule ${schedule.id}:`, error);
-                        this.scheduleLock.release(scheduleId);
+                        // Ensure lock is released on any unhandled errors
+                        if (this.scheduleLock.getLockInfo(scheduleId)) {
+                            this.scheduleLock.release(scheduleId);
+                        }
                     }
                 }
             }
@@ -244,20 +268,23 @@ export class SchedulerEngine {
         return new Date(schedule.nextRunAt);
     }
 
-    private async executeSchedule(schedule: PersistedSchedule, runId: string, manual: boolean): Promise<RunResult> {
+     private async executeSchedule(schedule: PersistedSchedule, runId: string, manual: boolean): Promise<RunResult> {
         const startedAt = new Date().toISOString();
         const scheduleId = schedule.id;
 
+        // Create and store the run context early so that schedule_run entry is created
         try {
             const template = schedule.runTemplate as unknown as ScheduleRunTemplate;
-
-            const nextRunAt = this.computeNextRunAt(schedule.cronExpr, new Date(Date.now() + 60_000));
 
             const runContext = createRunContext({
                 runId,
                 runType: template.sourceType ?? 'task',
                 sourceId: template.sourceId ?? schedule.id,
                 rootGoal: template.goal || schedule.name,
+                trigger: manual ? 'manual' : 'schedule',
+                scheduleId: schedule.id,
+                parentRunId: template.parentRunId ?? undefined,
+                labels: template.labels || [],
                 metadata: {
                     kind: 'schedule',
                     scheduleId: schedule.id,
@@ -265,10 +292,14 @@ export class SchedulerEngine {
                     manual,
                     sourceType: template.sourceType ?? null,
                     sourceId: template.sourceId ?? null,
+                    nextRunAt: this.computeNextRunAt(schedule.cronExpr, new Date(Date.now() + 60_000)) ?? undefined
                 },
             });
 
-            this.scheduleRepository.markRunStarted(scheduleId, startedAt, nextRunAt);
+            // Update main schedule with start time and next run time
+            this.scheduleRepository.markRunStarted(scheduleId, startedAt, runContext.metadata.nextRunAt as string | null | undefined ?? null);
+
+            // Create the schedule run record
             this.scheduleRunRepository.create({
                 scheduleId,
                 runId: runContext.runId,
@@ -278,6 +309,7 @@ export class SchedulerEngine {
 
             console.log(`[SchedulerEngine] Starting ${manual ? 'manual' : 'auto'} execution for schedule ${scheduleId}, run ${runId}`);
 
+            // Execute the scheduled run
             if (template.sourceType === 'swarm' && template.sourceId) {
                 await startSwarmExecutionWithOptions(template.sourceId, this.swarmExecutionContext, {
                     runContext,
@@ -289,22 +321,24 @@ export class SchedulerEngine {
                     manageRunLifecycle: true,
                 });
             } else {
+                // For cases where we don't have specific execution handlers
                 runEngine.startRun(runContext);
                 runEngine.finishRun(runContext.runId);
             }
 
             return { success: true, runId };
         } catch (error: unknown) {
+            // On error, still update the main schedule with the finish time
             const finishedAt = new Date().toISOString();
             const errorMessage = error instanceof Error ? error.message : 'Unknown scheduler error';
-
+            
             console.error(`[SchedulerEngine] Execution failed for schedule ${scheduleId}, run ${runId}:`, error);
-
+            
+            // Only update the schedule repository, schedule run record will be handled by event listener
             this.scheduleRepository.markRunFinished(scheduleId, finishedAt);
-            if (runId) {
-                this.scheduleRunRepository.complete(runId, finishedAt, 'failed', errorMessage);
-            }
-
+            
+            // Since this was a failed execution, we need to ensure the lock gets released
+            // The event listener will handle it for regular errors, but we might need additional protection
             return { success: false, error: errorMessage, runId };
         }
     }

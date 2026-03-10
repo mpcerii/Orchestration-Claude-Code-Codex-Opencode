@@ -99,7 +99,7 @@ export class ScheduleRunRepository {
 
     list(): PersistedScheduleRun[] {
         const db = getSqliteDb();
-        return (db.prepare('SELECT * FROM schedule_runs ORDER BY started_at DESC').all() as unknown as ScheduleRunRow[]).map(mapScheduleRun);
+        return (db.prepare('SELECT * FROM schedule_runs ORDER BY started_at DESC').all() as ScheduleRunRow[]).map(mapScheduleRun);
     }
 
     listByScheduleId(scheduleId: string): PersistedScheduleRun[] {
@@ -108,25 +108,25 @@ export class ScheduleRunRepository {
             SELECT * FROM schedule_runs
             WHERE schedule_id = :scheduleId
             ORDER BY started_at DESC
-        `).all({ scheduleId }) as unknown as ScheduleRunRow[]).map(mapScheduleRun);
+        `).all({ scheduleId }) as ScheduleRunRow[]).map(mapScheduleRun);
     }
 
     deleteById(id: string): boolean {
         const db = getSqliteDb();
         const result = db.prepare('DELETE FROM schedule_runs WHERE id = :id').run({ id });
-        return Number(result.changes) > 0;
+        return result.changes > 0;
     }
 
     deleteByRunId(runId: string): boolean {
         const db = getSqliteDb();
         const result = db.prepare('DELETE FROM schedule_runs WHERE run_id = :runId').run({ runId });
-        return Number(result.changes) > 0;
+        return result.changes > 0;
     }
 
     deleteByScheduleId(scheduleId: string): number {
         const db = getSqliteDb();
         const result = db.prepare('DELETE FROM schedule_runs WHERE schedule_id = :scheduleId').run({ scheduleId });
-        return Number(result.changes);
+        return result.changes;
     }
 }
 

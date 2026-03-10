@@ -67,5 +67,7 @@ export function runSqliteMigrations(db: DatabaseSync): void {
 
         CREATE INDEX IF NOT EXISTS idx_run_events_run_id ON run_events(run_id);
         CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+        CREATE INDEX IF NOT EXISTS idx_schedules_enabled ON schedules(enabled);
+        CREATE INDEX IF NOT EXISTS idx_memory_entries_scope ON memory_entries(scope_type, scope_id);
     `);
 }

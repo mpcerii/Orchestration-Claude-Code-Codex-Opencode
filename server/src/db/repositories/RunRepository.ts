@@ -82,7 +82,12 @@ export class RunRepository {
 
     list(): PersistedRun[] {
         const db = getSqliteDb();
-        return (db.prepare('SELECT * FROM runs ORDER BY created_at DESC').all() as unknown as RunRow[]).map(mapRun);
+        return (db.prepare('SELECT * FROM runs ORDER BY created_at DESC').all() as RunRow[]).map(mapRun);
+    }
+
+    listByStatus(status: RunLifecycleStatus): PersistedRun[] {
+        const db = getSqliteDb();
+        return (db.prepare('SELECT * FROM runs WHERE status = :status ORDER BY created_at DESC').all({ status }) as RunRow[]).map(mapRun);
     }
 
     deleteById(runId: string): boolean {

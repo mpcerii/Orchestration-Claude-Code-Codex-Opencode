@@ -7,10 +7,16 @@ import {
     Settings,
     Zap,
     Network,
+    Play,
+    Clock,
+    Database,
 } from 'lucide-react';
 
 const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Swarm Studio' },
+    { to: '/studio/runs', icon: Play, label: 'Runs' },
+    { to: '/studio/schedules', icon: Clock, label: 'Schedules' },
+    { to: '/studio/memory', icon: Database, label: 'Memory' },
     { to: '/dashboard', icon: LayoutDashboard, label: 'Legacy Dashboard' },
     { to: '/agents', icon: Bot, label: 'Agent Studio' },
     { to: '/trees', icon: GitBranch, label: 'Agent Trees' },
